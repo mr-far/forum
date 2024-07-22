@@ -1,0 +1,8 @@
+-- Update column types 2
+
+ALTER TABLE messages
+ALTER COLUMN flags TYPE NUMERIC,
+ALTER COLUMN content SET NOT NULL;
+
+ALTER TABLE threads
+ALTER COLUMN title SET NOT NULL
