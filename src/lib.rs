@@ -1,31 +1,33 @@
-use actix_web::web;
-use crate::{
-    models::database::DatabaseManager,
-    utils::snowflake::SnowflakeBuilder
+use std::sync::Mutex;
+use {
+    actix_web::web,
+     crate::{
+        models::database::DatabaseManager,
+        utils::snowflake::SnowflakeBuilder
+    }
 };
 
 pub mod utils;
 pub mod routes;
 pub mod models;
 
-#[derive(Clone)]
 pub struct AppData {
-    pub snowflake: SnowflakeBuilder,
+    pub snowflake: Mutex<SnowflakeBuilder>,
     pub database: DatabaseManager
 }
 
 pub fn app_config(cfg: &mut web::ServiceConfig) {
     cfg.app_data(
-            web::JsonConfig::default()
-                .error_handler(|err, _req| routes::RESTError::Validation(err.to_string()).into()),
+        web::JsonConfig::default()
+            .error_handler(|err, _| routes::HttpError::Payload(err).into()),
         )
         .app_data(
             web::PathConfig::default()
-                .error_handler(|err, _req| routes::RESTError::Validation(err.to_string()).into()),
+                .error_handler(|err, _| routes::HttpError::Path(err).into()),
         )
         .app_data(
             web::QueryConfig::default()
-                .error_handler(|err, _req| routes::RESTError::Validation(err.to_string()).into()),
+                .error_handler(|err, _| routes::HttpError::Query(err).into()),
         )
         .configure(routes::config);
 }

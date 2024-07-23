@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use {
     actix_web::{web, App, HttpServer},
     env_logger::Env,
@@ -15,16 +16,18 @@ async fn main() -> std::io::Result<()> {
     dotenvy::dotenv().ok();
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
-    let pool = PgPool::connect(&std::env::var("DATABASE_URL").expect("DATABASE_URL environment variable is required"))
-        .await?;
+    let database_url = dotenvy::var("DATABASE_URL").expect("`DATABASE_URL` not in .env");
+    let pool = PgPool::connect(&database_url)
+        .await
+        .expect("Failed to connect to database");
 
-    let data = AppData {
+    let app = AppData {
         snowflake: SnowflakeBuilder {
             epoch: EPOCH,
             worker_id: 1,
             increment: 0,
-        },
-        database: DatabaseManager::new(pool.close())
+        }.into(),
+        database: DatabaseManager::new(pool.clone())
     };
 
     info!(
@@ -36,8 +39,8 @@ async fn main() -> std::io::Result<()> {
             .wrap(actix_web::middleware::Compress::default())
             .wrap(actix_web::middleware::Logger::default())
             .configure(|cfg| app_config(cfg))
-            .app_data(web::Data::new(data))
-            .app_data(web::Data::new(pool))
+            .app_data(web::Data::new(Arc::new(app)))
+            .app_data(web::Data::new(pool.clone()))
     })
         .bind(dotenvy::var("ADDRESS").unwrap())?
         .run()
