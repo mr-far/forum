@@ -1,7 +1,11 @@
-use bitflags::bitflags;
-use serde::Serialize;
-use crate::bitflags_serde_impl;
-use crate::utils::snowflake::Snowflake;
+use {
+    bitflags::bitflags,
+    serde::{Serialize, Deserialize},
+    crate::{
+        bitflags_serde_impl,
+        utils::snowflake::Snowflake
+    }
+};
 
 pub struct UserRecord {
     pub id: i64,
@@ -9,12 +13,12 @@ pub struct UserRecord {
     pub display_name: Option<String>,
     pub bio: Option<String>,
     pub permissions: i64,
-    pub flags: i64
+    pub flags: i32
 }
 
 bitflags! {
     #[derive(Debug, Clone, Copy)]
-    pub struct UserFlags: u64 {
+    pub struct UserFlags: i32 {
         /// User is a system
         const SYSTEM = 1 << 0;
         /// Forum staff or trusted user
@@ -32,7 +36,7 @@ bitflags! {
 
 bitflags! {
     #[derive(Debug, Clone, Copy)]
-    pub struct Permissions: u64 {
+    pub struct Permissions: i64 {
         /// Allows for reading non-locked threads
         const READ_PUBLIC_THREADS = 1 << 0;
         /// Allows creation of threads
@@ -52,12 +56,12 @@ bitflags! {
         /// Allows for timing out and banning users
         const MODERATE_USERS = 1 << 8;
         /// Allows all permissions and grants access to all endpoints (This is dangerous permission to grant)
-        const ADMINISTRATOR = u64::MAX;
+        const ADMINISTRATOR = i64::MAX;
     }
 }
 
-bitflags_serde_impl!(UserFlags, u64);
-bitflags_serde_impl!(Permissions, u64);
+bitflags_serde_impl!(UserFlags, i32);
+bitflags_serde_impl!(Permissions, i64);
 
 #[derive(Serialize, Debug, Clone)]
 pub struct User {
@@ -67,4 +71,27 @@ pub struct User {
     pub bio: Option<String>,
     pub permissions: Permissions,
     pub flags: UserFlags
+}
+
+impl User {
+    pub fn has_flag(self, flag: UserFlags) -> bool {
+        self.flags.contains(flag)
+    }
+
+    pub fn has_permission(self, permission: Permissions) -> bool {
+        self.permissions.contains(permission)
+    }
+}
+
+impl From<UserRecord> for User {
+    fn from(x: UserRecord) -> Self {
+        Self {
+            id: Snowflake(x.id),
+            username: x.username,
+            display_name: x.display_name,
+            bio: x.bio,
+            permissions: Permissions::from_bits_retain(x.permissions),
+            flags: UserFlags::from_bits_retain(x.flags)
+        }
+    }
 }

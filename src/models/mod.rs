@@ -4,3 +4,4 @@ pub mod category;
 pub mod user;
 pub mod thread;
 pub mod message;
+pub mod requests;

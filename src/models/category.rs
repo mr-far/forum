@@ -1,13 +1,16 @@
-use serde::Serialize;
-use crate::models::thread::Thread;
-use crate::models::user::User;
-use crate::utils::snowflake::Snowflake;
+use {
+    serde::Serialize,
+    crate::{
+        models::user::User,
+        utils::snowflake::Snowflake
+    }
+};
 
 pub struct CategoryRecord {
     pub id: i64,
     pub title: String,
     pub description: String,
-    pub owner_id: Option<i64>,
+    pub owner_id: i64,
     pub locked: bool
 }
 
@@ -17,6 +20,20 @@ pub struct Category {
     pub title: String,
     pub description: String,
     pub owner: User,
-    pub locked: bool,
-    pub threads: Vec<Thread>
+    pub locked: bool
+}
+
+impl Category {
+    pub fn from(
+        value: CategoryRecord,
+        owner: User
+    ) -> Self {
+        Self {
+            id: Snowflake(value.id),
+            title: value.title,
+            description: value.description,
+            locked: value.locked,
+            owner
+        }
+    }
 }
