@@ -1,14 +1,18 @@
-use std::process::id;
-use std::time::SystemTime;
-use serde::{
-    Deserialize, Deserializer, Serialize, Serializer,
-    de::{Error, Unexpected}
+use {
+    std::{
+        process::id,
+        time::SystemTime,
+    },
+    serde::{
+        Deserialize, Deserializer, Serialize, Serializer,
+        de::{Error, Unexpected}
+    }
 };
 
 // Custom epoch of 2024-07-22T12:00:00Z in milliseconds
 pub const EPOCH: u64 = 1_721_638_800_000;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct SnowflakeBuilder {
     pub epoch: u64,
     pub worker_id: u32,
@@ -60,7 +64,7 @@ impl Serialize for Snowflake {
 }
 
 impl<'de> Deserialize<'de> for Snowflake {
-    fn deserialize<'de, D>(deserializer: D) -> Result<i64, D::Error> where D: Deserializer<'de>,
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de>,
     {
         #[derive(Debug, Deserialize)]
         #[serde(untagged)]
@@ -69,14 +73,15 @@ impl<'de> Deserialize<'de> for Snowflake {
             Int(i64),
         }
 
-        Snowflake::deserialize(deserializer).and_then(|snowflake| match snowflake {
-            Snowflake::String(s) => s.parse::<i64>().map_err(|err| {
-                Error::invalid_value(
-                    Unexpected::Str(err.to_string().as_str()),
-                    &"64-bit integer as string",
-                )
-            }),
-            Snowflake::Int(i) => Ok(i),
-        })
+        Snowflake::deserialize(deserializer).and_then(|snowflake|
+            match snowflake {
+                Snowflake::String(s) => s.parse::<i64>().map_err(|err| {
+                    Error::invalid_value(
+                        Unexpected::Str(err.to_string().as_str()),
+                        &"64-bit integer as string",
+                    )
+                }),
+                Snowflake::Int(i) => Ok(i),
+        }).map(Snowflake)
     }
 }

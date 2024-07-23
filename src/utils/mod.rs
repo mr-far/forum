@@ -1,2 +1,2 @@
 pub mod snowflake;
-mod serde_impl;
+pub mod serde_impl;
