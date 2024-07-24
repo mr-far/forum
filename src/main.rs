@@ -1,11 +1,11 @@
-use std::sync::Arc;
 use {
     actix_web::{web, App, HttpServer},
     env_logger::Env,
     log::info,
     sqlx::PgPool,
     forum::{
-        {app_config, AppData},
+        routes,
+        AppData,
         utils::snowflake::{EPOCH, SnowflakeBuilder},
         models::database::DatabaseManager
     },
@@ -21,14 +21,15 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to connect to database");
 
-    let app = AppData {
+    let data = web::Data::new(AppData {
         snowflake: SnowflakeBuilder {
             epoch: EPOCH,
             worker_id: 1,
             increment: 0,
         }.into(),
-        database: DatabaseManager::new(pool.clone())
-    };
+        database: DatabaseManager::new(pool.clone()),
+        pool: pool.clone()
+    });
 
     info!(
         "Listening for HFD Backend on {}",
@@ -38,9 +39,21 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(actix_web::middleware::Compress::default())
             .wrap(actix_web::middleware::Logger::default())
-            .configure(|cfg| app_config(cfg))
-            .app_data(web::Data::new(Arc::new(app)))
+            .app_data(web::Data::clone(&data))
             .app_data(web::Data::new(pool.clone()))
+            .app_data(
+                web::JsonConfig::default()
+                    .error_handler(|err, _| routes::HttpError::Payload(err).into()),
+            )
+            .app_data(
+                web::PathConfig::default()
+                    .error_handler(|err, _| routes::HttpError::Path(err).into()),
+            )
+            .app_data(
+                web::QueryConfig::default()
+                    .error_handler(|err, _| routes::HttpError::Query(err).into()),
+            )
+            .configure(routes::config)
     })
         .bind(dotenvy::var("ADDRESS").unwrap())?
         .run()
