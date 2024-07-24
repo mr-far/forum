@@ -9,13 +9,14 @@ use {
 };
 
 mod users;
-mod category;
+mod categories;
+mod auth;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("api/v1")
             .configure(users::config)
-            .configure(category::config),
+            .configure(categories::config),
     );
 }
 
@@ -25,6 +26,12 @@ pub type Result<T> = core::result::Result<T, HttpError>;
 pub enum HttpError {
     #[error("Unknown User")]
     UnknownUser,
+    #[error("Unknown Category")]
+    UnknownCategory,
+    #[error("Unknown Thread")]
+    UnknownThread,
+    #[error("Unknown Message")]
+    UnknownMessage,
     #[error("{0}")]
     Payload(#[from] actix_web::error::JsonPayloadError),
     #[error("Validation error: {0}")]
@@ -49,7 +56,10 @@ impl actix_web::ResponseError for HttpError {
 
             HttpError::MissingAccess => StatusCode::FORBIDDEN,
 
-            HttpError::UnknownUser => StatusCode::NOT_FOUND,
+            HttpError::UnknownUser
+            | HttpError::UnknownCategory
+            | HttpError::UnknownThread
+            | HttpError::UnknownMessage => StatusCode::NOT_FOUND,
 
             HttpError::Database(..) => StatusCode::INTERNAL_SERVER_ERROR
         }
@@ -60,6 +70,9 @@ impl actix_web::ResponseError for HttpError {
             code: match self {
                 // The 1xxxx class of error code indicates that some data wasn't found
                 HttpError::UnknownUser => 10000,
+                HttpError::UnknownCategory => 10001,
+                HttpError::UnknownThread => 10002,
+                HttpError::UnknownMessage => 10003,
 
                 // The 2xxxx class of error code indicates that data was malformed or invalid
                 HttpError::Payload(..) => 20000,
