@@ -1,5 +1,7 @@
-use serde::Deserialize;
-use validator::Validate;
+use {
+    serde::Deserialize,
+    validator::Validate
+};
 
 #[derive(Deserialize, Validate)]
 pub struct CreateCategoryPayload {

@@ -4,8 +4,7 @@ use {
     crate::{
         bitflags_serde_impl,
         models::{
-            message::Message, user::User,
-            category::Category
+            message::Message, user::User
         },
         utils::snowflake::Snowflake
     }
@@ -40,7 +39,7 @@ pub struct Thread {
     pub title: String,
     pub author: User,
     pub flags: ThreadFlags,
-    pub category: Category,
+    pub category_id: Snowflake,
     pub original_message: Message
 }
 
@@ -49,15 +48,14 @@ impl Thread {
         x: ThreadRecord,
         author: User,
         original_message: Message,
-        category: Category
     ) -> Self {
         Self {
             id: Snowflake(x.id),
             title: x.title,
             flags: ThreadFlags::from_bits_retain(x.flags),
+            category_id: Snowflake(x.category_id),
             author,
-            original_message,
-            category
+            original_message
         }
     }
 

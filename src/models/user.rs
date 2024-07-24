@@ -2,7 +2,9 @@ use {
     bitflags::bitflags,
     serde::{Serialize, Deserialize},
     crate::{
+        AppData,
         bitflags_serde_impl,
+        models::secret::Secret,
         utils::snowflake::Snowflake
     }
 };
@@ -65,21 +67,35 @@ bitflags_serde_impl!(Permissions, i64);
 
 #[derive(Serialize, Debug, Clone)]
 pub struct User {
+    /// The user ID
     pub id: Snowflake,
+    /// The username
     pub username: String,
+    /// The user's display name
     pub display_name: Option<String>,
+    /// The user's bio
     pub bio: Option<String>,
+    /// The user's permissions
     pub permissions: Permissions,
+    /// The user's flags
     pub flags: UserFlags
 }
 
+
 impl User {
-    pub fn has_flag(self, flag: UserFlags) -> bool {
+    /// Checks whether user has specified flag
+    pub fn has_flag(&self, flag: UserFlags) -> bool {
         self.flags.contains(flag)
     }
 
-    pub fn has_permission(self, permission: Permissions) -> bool {
+    /// Checks whether user has specified permission
+    pub fn has_permission(&self, permission: Permissions) -> bool {
         self.permissions.contains(permission)
+    }
+
+    /// User secret
+    pub fn secret(&self, app: AppData) -> Secret {
+        app.database.fetch_secret(self.id)
     }
 }
 
