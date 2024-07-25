@@ -94,8 +94,8 @@ impl User {
     }
 
     /// User secret
-    pub fn secret(&self, app: AppData) -> Secret {
-        app.database.fetch_secret(self.id)
+    pub async fn secret(&self, app: &AppData) -> Secret {
+        app.database.fetch_secret(self.id).await.unwrap_or_default()
     }
 }
 

@@ -3,8 +3,11 @@ use {
     base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD},
     secrecy::SecretString,
     std::time::{SystemTime, UNIX_EPOCH},
-    rand::{rngs::StdRng, SeedableRng},
-    crate::utils::snowflake::Snowflake
+    rand::{rngs::StdRng, SeedableRng, RngCore},
+    crate::utils::{
+        to_string_radix_signed,
+        snowflake::Snowflake
+    }
 
 };
 
@@ -16,7 +19,7 @@ pub struct SecretRecord {
     pub secret3: i64,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Default)]
 pub struct Secret {
     pub id: Snowflake,
 
@@ -52,9 +55,9 @@ impl From<SecretRecord> for Secret {
         Self {
             id: Snowflake(x.id),
             hash: x.password_hash,
-            secret1,
-            secret2,
-            secret3
+            secret1: x.secret1,
+            secret2: x.secret2,
+            secret3: x.secret3
         }
     }
 }
@@ -74,14 +77,14 @@ pub fn serialize_user_secret(s1: i64, s2: i64, uid: i64) -> String {
 
     return format!(
         "{}{}{}{}",
-        crate::utils::to_string_radix_signed(s1, 36).to_uppercase(),
-        crate::utils::to_string_radix_signed(s2, 36)
+        to_string_radix_signed(s1, 36).to_uppercase(),
+        to_string_radix_signed(s2, 36)
             .chars()
             .rev()
             .collect::<String>()
             .to_lowercase(),
-        crate::utils::to_string_radix_signed(t2, 36).to_uppercase(),
-        crate::utils::to_string_radix_signed(t1, 36)
+        to_string_radix_signed(t2, 36).to_uppercase(),
+        to_string_radix_signed(t1, 36)
             .chars()
             .rev()
             .collect::<String>()
@@ -91,7 +94,7 @@ pub fn serialize_user_secret(s1: i64, s2: i64, uid: i64) -> String {
 
 /// Serializes the secret timestamp.
 pub fn serialize_secret_timestamp(id: i64, secret: i64) -> String {
-    crate::utils::to_string_radix_signed(secret, 20)
+    to_string_radix_signed(secret, 20)
         .chars()
         .enumerate()
         .map(|(i, c)| {
@@ -116,9 +119,9 @@ pub fn serialize_user_token(id: i64, timestamp: String, secret: String) -> Strin
 
 /// Generates 3 token secrets
 pub fn generate_user_secrets() -> (i64, i64, i64) {
-    let random = StdRng::from_entropy().into();
-    let secret1 = (random.lock().unwrap().next_u64() % i64::MAX as u64) as i64;
-    let secret2 = (random.lock().unwrap().next_u64() % i64::MAX as u64) as i64;
+    let mut random = StdRng::from_entropy();
+    let secret1 = (random.next_u64() % i64::MAX as u64) as i64;
+    let secret2 = (random.next_u64() % i64::MAX as u64) as i64;
 
     let secret3 = SystemTime::now()
         .duration_since(UNIX_EPOCH)
