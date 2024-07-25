@@ -1,4 +1,5 @@
 use {
+    sha256::digest,
     sqlx::PgPool,
     crate::{
         models::{
@@ -36,6 +37,22 @@ impl DatabaseManager {
     /// The user if found, otherwise `None`.
     pub async fn fetch_user(&self, user_id: Snowflake) -> Option<User> {
         sqlx::query_as!(UserRecord, "SELECT * FROM users WHERE id = $1", user_id.0)
+            .fetch_optional(&self.pool)
+            .await.ok()?
+            .map(|user| User::from(user))
+    }
+
+    /// Fetch a user from the database by their username.
+    ///
+    /// ## Arguments
+    ///
+    /// * `username` - The username of the user to fetch.
+    ///
+    /// ## Returns
+    ///
+    /// The user if found, otherwise `None`.
+    pub async fn fetch_user_by_username(&self, username: String) -> Option<User> {
+        sqlx::query_as!(UserRecord, "SELECT * FROM users WHERE username = $1", username)
             .fetch_optional(&self.pool)
             .await.ok()?
             .map(|user| User::from(user))
@@ -95,9 +112,9 @@ impl DatabaseManager {
     /// ## Returns
     ///
     /// The secret if found, otherwise `None`.
-    pub async fn fetch_secret(&self, user_id: Snowflake) -> Secret {
-        sqlx::query_as!(SecretRecord, r#"SELECT * FROM secrets WHERE id = $1"#, user_id.0)
-            .fetch_option(&self.pool)
+    pub async fn fetch_secret(&self, user_id: Snowflake) -> Option<Secret> {
+        sqlx::query_as!(SecretRecord, r#"SELECT * FROM secrets WHERE secret2 = $1"#, user_id.0)
+            .fetch_optional(&self.pool)
             .await.ok()?
             .map(|secret| Secret::from(secret))
     }
@@ -110,7 +127,7 @@ impl DatabaseManager {
     pub async fn create_secret(&self, id: Snowflake, password: String) -> Result<SecretRecord, sqlx::Error> {
         let secrets = generate_user_secrets();
         sqlx::query_as!(SecretRecord, r#"INSERT INTO secrets(id, password_hash, secret1, secret2, secret3) VALUES ($1, $2, $3, $4, $5) RETURNING *"#,
-            id.0, "", secrets.0, secrets.1, secrets.2
+            id.0, digest(password), secrets.0, secrets.1, secrets.2
         ).fetch_one(&self.pool).await
     }
 
