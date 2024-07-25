@@ -19,7 +19,7 @@ pub struct SnowflakeBuilder {
     pub increment: u16,
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Copy, Ord, Hash, Debug, Clone)]
+#[derive(PartialEq, Eq, PartialOrd, Copy, Ord, Hash, Debug, Clone, Default)]
 pub struct Snowflake(pub i64);
 
 impl SnowflakeBuilder {
