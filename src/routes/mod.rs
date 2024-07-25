@@ -16,7 +16,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("api/v1")
             .configure(users::config)
-            .configure(categories::config),
+            .configure(categories::config)
+            .configure(auth::config),
     );
 }
 
@@ -43,7 +44,11 @@ pub enum HttpError {
     #[error("Error while interacting with the database: {0}")]
     Database(#[from] sqlx::Error),
     #[error("Missing access")]
-    MissingAccess
+    MissingAccess,
+    #[error("The username is already taken")]
+    TakenUsername,
+    #[error("Too week password")]
+    WeekPassword
 }
 
 impl actix_web::ResponseError for HttpError {
@@ -52,7 +57,9 @@ impl actix_web::ResponseError for HttpError {
             HttpError::Payload(..)
             | HttpError::Validation(..)
             | HttpError::Query(..)
-            | HttpError::Path(..) => StatusCode::BAD_REQUEST,
+            | HttpError::Path(..)
+            | HttpError::TakenUsername
+            | HttpError::WeekPassword => StatusCode::BAD_REQUEST,
 
             HttpError::MissingAccess => StatusCode::FORBIDDEN,
 
@@ -80,6 +87,10 @@ impl actix_web::ResponseError for HttpError {
                 HttpError::Query(..) => 20002,
                 HttpError::Validation(..) => 20003,
                 HttpError::Database(..) => 20004,
+                HttpError::TakenUsername => 20010,
+
+                // The 3xxxx class of error code indicates that authorization process failed
+                HttpError::WeekPassword => 30000,
 
                 // The 4xxxx class of error code indicates that recourse requires special permission
                 HttpError::MissingAccess => 40000
