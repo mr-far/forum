@@ -5,7 +5,8 @@ use {
         AppData,
         bitflags_serde_impl,
         models::secret::Secret,
-        utils::snowflake::Snowflake
+        utils::snowflake::Snowflake,
+        routes::HttpError
     }
 };
 
@@ -94,8 +95,9 @@ impl User {
     }
 
     /// User secret
-    pub async fn secret(&self, app: &AppData) -> Secret {
-        app.database.fetch_secret(self.id).await.unwrap_or_default()
+    pub async fn secret(&self, app: &AppData) -> Result<Secret, HttpError> {
+        app.database.fetch_secret(self.id)
+            .await.ok_or(HttpError::Unauthorized)
     }
 }
 

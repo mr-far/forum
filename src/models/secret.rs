@@ -5,7 +5,7 @@ use {
     std::time::{SystemTime, UNIX_EPOCH},
     rand::{rngs::StdRng, SeedableRng, RngCore},
     crate::utils::{
-        to_string_radix_signed,
+        convectors::to_string_radix_signed,
         snowflake::Snowflake
     }
 
@@ -19,17 +19,12 @@ pub struct SecretRecord {
     pub secret3: i64,
 }
 
-#[derive(Serialize, Clone, Default)]
+#[derive(Serialize, Clone, Debug)]
 pub struct Secret {
     pub id: Snowflake,
-
-    #[serde(default, skip)]
     pub hash: String,
-    #[serde(default, skip)]
     pub secret1: i64,
-    #[serde(default, skip)]
     pub secret2: i64,
-    #[serde(default, skip)]
     pub secret3: i64
 }
 

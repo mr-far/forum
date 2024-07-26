@@ -38,7 +38,7 @@ pub struct Message {
     pub content: String,
     pub author: User,
     pub thread_id: Snowflake,
-    pub referenced_message: Option<Box<Message>>,
+    pub referenced_message_id: Option<i64>,
     pub flags: MessageFlags,
     pub updated_at: Option<DateTime<Utc>>
 }
@@ -46,8 +46,7 @@ pub struct Message {
 impl Message {
     pub fn from(
         x: MessageRecord,
-        author: User,
-        referenced_message: Option<Box<Message>>
+        author: User
     ) -> Self {
         Self {
             id: Snowflake(x.id),
@@ -56,7 +55,7 @@ impl Message {
             thread_id: Snowflake(x.thread_id),
             flags: MessageFlags::from_bits_retain(x.flags),
             updated_at: x.updated_at,
-            referenced_message
+            referenced_message_id: x.referenced_message_id
         }
     }
 
