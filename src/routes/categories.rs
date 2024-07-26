@@ -1,6 +1,7 @@
 use {
     actix_web::{
-        web, HttpResponse
+        web, HttpResponse, HttpRequest,
+        http::header::AUTHORIZATION
     },
     validator::Validate,
     crate::{
@@ -9,9 +10,9 @@ use {
         models::{
             category::Category,
             user::Permissions,
-            requests::CreateCategoryPayload
+            requests::{CreateCategoryPayload, ModifyCategoryPayload}
         },
-        utils::snowflake::Snowflake
+        utils::authorization::extract_header
     }
 };
 
@@ -19,7 +20,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("categories")
             .route("{category_id}", web::get().to(get_category))
-            //.route("{category_id}", web::patch().to(modify_category))
+            // .route("{category_id}", web::patch().to(modify_category))
             .route("", web::post().to(create_category))
     );
 }
@@ -29,31 +30,29 @@ async fn get_category(
     app: web::Data<AppData>,
 ) -> Result<HttpResponse> {
     let category = app.database.fetch_category(category_id.into_inner().into())
-        .await
-        .ok_or(HttpError::UnknownCategory)?;
+        .await.ok_or(HttpError::UnknownCategory)?;
 
-    let user = app.database.fetch_user(Snowflake(category.owner_id))
-        .await
-        .ok_or(HttpError::UnknownUser)?;
+    let user = app.database.fetch_user(category.owner_id.into())
+        .await.ok_or(HttpError::UnknownUser)?;
 
     Ok(HttpResponse::Ok().json(Category::from(category, user)))
 }
 
 async fn create_category(
+    request: HttpRequest,
     payload: web::Json<CreateCategoryPayload>,
     app: web::Data<AppData>,
 ) -> Result<HttpResponse> {
-    payload
-        .validate()
-        .map_err(|err| HttpError::Validation(err))?;
-
-    let user = app.database.fetch_user(Snowflake(123))
-        .await
-        .ok_or(HttpError::UnknownUser)?;
+    let token = extract_header(&request, AUTHORIZATION)?;
+    let user = app.database.fetch_user_by_token(token).await?;
 
     if !user.clone().has_permission(Permissions::MANAGE_CATEGORIES) {
         return Err(HttpError::MissingAccess)
     }
+
+    payload
+        .validate()
+        .map_err(|err| HttpError::Validation(err))?;
 
     let id = app.snowflake.lock().unwrap().build();
     app.database.create_category(id, user.id, payload.into_inner())
@@ -63,7 +62,7 @@ async fn create_category(
 }
 
 // async fn modify_category(
-//     payload: web::Json<CreateCategoryPayload>,
+//     payload: web::Json<ModifyCategoryPayload>,
 //     app: web::Data<AppData>,
 // ) -> Result<HttpResponse> {
 //     payload

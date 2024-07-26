@@ -11,6 +11,7 @@ use {
 mod users;
 mod categories;
 mod auth;
+mod threads;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -41,6 +42,8 @@ pub enum HttpError {
     Path(#[from] actix_web::error::PathError),
     #[error("{0}")]
     Query(#[from] actix_web::error::QueryPayloadError),
+    #[error("{0}")]
+    Header(String),
     #[error("Error while interacting with the database: {0}")]
     Database(#[from] sqlx::Error),
     #[error("Missing access")]
@@ -48,7 +51,11 @@ pub enum HttpError {
     #[error("The username is already taken")]
     TakenUsername,
     #[error("Too week password")]
-    WeekPassword
+    WeekPassword,
+    #[error("Unauthorized")]
+    Unauthorized,
+    #[error("Invalid credentials: {0}")]
+    InvalidCredentials(String),
 }
 
 impl actix_web::ResponseError for HttpError {
@@ -58,8 +65,12 @@ impl actix_web::ResponseError for HttpError {
             | HttpError::Validation(..)
             | HttpError::Query(..)
             | HttpError::Path(..)
+            | HttpError::Header(..)
             | HttpError::TakenUsername
-            | HttpError::WeekPassword => StatusCode::BAD_REQUEST,
+            | HttpError::WeekPassword
+            | HttpError::InvalidCredentials(..) => StatusCode::BAD_REQUEST,
+
+            HttpError::Unauthorized => StatusCode::UNAUTHORIZED,
 
             HttpError::MissingAccess => StatusCode::FORBIDDEN,
 
@@ -85,12 +96,15 @@ impl actix_web::ResponseError for HttpError {
                 HttpError::Payload(..) => 20000,
                 HttpError::Path(..) => 20001 ,
                 HttpError::Query(..) => 20002,
-                HttpError::Validation(..) => 20003,
-                HttpError::Database(..) => 20004,
+                HttpError::Header(..) => 20003,
+                HttpError::Validation(..) => 20004,
+                HttpError::InvalidCredentials(..) => 20005,
+                HttpError::Database(..) => 20007,
                 HttpError::TakenUsername => 20010,
 
                 // The 3xxxx class of error code indicates that authorization process failed
-                HttpError::WeekPassword => 30000,
+                HttpError::Unauthorized => 30000,
+                HttpError::WeekPassword => 30001,
 
                 // The 4xxxx class of error code indicates that recourse requires special permission
                 HttpError::MissingAccess => 40000
