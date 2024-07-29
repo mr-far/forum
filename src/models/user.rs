@@ -1,4 +1,5 @@
 use {
+    sqlx::PgExecutor,
     bitflags::bitflags,
     serde::{Serialize, Deserialize},
     crate::{
@@ -6,10 +7,11 @@ use {
         bitflags_serde_impl,
         models::secret::Secret,
         utils::snowflake::Snowflake,
-        routes::HttpError
+        routes::{HttpError, Result as HttpResult}
     }
 };
 
+/// Represents a user record stored in the database.
 pub struct UserRecord {
     pub id: i64,
     pub username: String,
@@ -66,7 +68,7 @@ bitflags! {
 bitflags_serde_impl!(UserFlags, i32);
 bitflags_serde_impl!(Permissions, i64);
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct User {
     /// The user ID
     pub id: Snowflake,
@@ -84,20 +86,53 @@ pub struct User {
 
 
 impl User {
-    /// Checks whether user has specified flag
+    /// Checks whether user has required [`ThreadFlags`]
     pub fn has_flag(&self, flag: UserFlags) -> bool {
         self.flags.contains(flag)
     }
 
-    /// Checks whether user has specified permission
+    /// Checks whether user has required [`Permissions`]
     pub fn has_permission(&self, permission: Permissions) -> bool {
         self.permissions.contains(permission)
     }
 
-    /// User secret
+    /// Returns user secret
     pub async fn secret(&self, app: &AppData) -> Result<Secret, HttpError> {
         app.database.fetch_secret(self.id)
             .await.ok_or(HttpError::Unauthorized)
+    }
+}
+
+impl UserRecord {
+    /// Saves a new user in the database.
+    ///
+    /// ## Returns
+    ///
+    /// * [`UserRecord`] on success, otherwise [`HttpError`].
+    ///
+    /// ## Errors
+    ///
+    /// * [`HttpError::Database`] - If the database query fails.
+    pub async fn save<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<Self> {
+        sqlx::query_as!(UserRecord, r#"INSERT INTO users(id, username, display_name) VALUES ($1, $2, $3) RETURNING *"#,
+            self.id, self.username, self.display_name
+        )
+            .fetch_one(executor).await
+            .map_err(|err| HttpError::Database(err))
+    }
+
+    /// Deletes the user.
+    ///
+    /// ## Errors
+    ///
+    /// * [`HttpError::Database`] - If the database query fails.
+    pub async fn delete<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<()> {
+        sqlx::query_as!(UserRecord, r#"DELETE FROM users WHERE id = $1"#,
+            self.id
+        )
+            .execute(executor).await
+            .map(|_| ())
+            .map_err(|err| HttpError::Database(err))
     }
 }
 

@@ -1,6 +1,7 @@
 use {
     serde::Deserialize,
     validator::Validate,
+    crate::utils::snowflake::Snowflake
 };
 
 #[derive(Deserialize, Validate)]
@@ -35,8 +36,21 @@ pub struct ModifyCategoryPayload {
 pub struct CreateThreadPayload {
     #[validate(length(min = 4, max = 128, message="Title length must be between 4 and 128 characters"))]
     pub title: String,
-    #[validate(length(min = 16, max = 4096, message="Description length must be between 16 and 2048 characters"))]
+    #[validate(length(min = 1, max = 4096, message="Message content length must be between 1 and 4096 characters"))]
     pub content: String,
-    pub category_id: i64,
+    pub category_id: Snowflake,
     pub is_nsfw: bool
+}
+
+#[derive(Deserialize, Validate)]
+pub struct CreateMessagePayload {
+    #[validate(length(min = 1, max = 4096, message="Message content length must be between 1 and 4096 characters"))]
+    pub content: String,
+    pub referenced_message_id: Option<Snowflake>
+}
+
+#[derive(Deserialize, Validate)]
+pub struct ModifyMessagePayload {
+    #[validate(length(min = 1, max = 4096, message="Message content length must be between 1 and 4096 characters"))]
+    pub content: String,
 }

@@ -1,4 +1,5 @@
 use {
+    sqlx::PgExecutor,
     bitflags::bitflags,
     serde::{Serialize, Deserialize},
     crate::{
@@ -6,10 +7,12 @@ use {
         models::{
             message::Message, user::User
         },
-        utils::snowflake::Snowflake
+        utils::snowflake::Snowflake,
+        routes::{HttpError, Result as HttpResult}
     }
 };
 
+/// Represents a thread record stored in the database.
 pub struct ThreadRecord {
     pub id: i64,
     pub title: String,
@@ -35,11 +38,17 @@ bitflags_serde_impl!(ThreadFlags, i32);
 
 #[derive(Serialize, Debug, Clone)]
 pub struct Thread {
+    /// The ID of the thread
     pub id: Snowflake,
-    pub title: String,
-    pub author: User,
-    pub flags: ThreadFlags,
+    /// The ID of the category the thread was created in
     pub category_id: Snowflake,
+    /// The author of the thread
+    pub author: User,
+    /// The title of the thread
+    pub title: String,
+    /// The thread's flags
+    pub flags: ThreadFlags,
+    /// The message the thread is referenced to
     pub original_message: Message
 }
 
@@ -59,7 +68,41 @@ impl Thread {
         }
     }
 
+    /// Checks whether thread has required [`ThreadFlags`]
     pub fn is(self, flag: ThreadFlags) -> bool {
         self.flags.contains(flag)
+    }
+}
+
+impl ThreadRecord {
+    /// Saves a new thread in the database.
+    ///
+    /// ## Returns
+    ///
+    /// * [`ThreadRecord`] on success, otherwise [`HttpError`].
+    ///
+    /// ## Errors
+    ///
+    /// * [`HttpError::UnknownCategory`] - If the category the thread will be created in is not found.
+    pub async fn save<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<Self> {
+        sqlx::query_as!(ThreadRecord, r#"INSERT INTO threads(id, author_id, category_id, original_message_id, title) VALUES ($1, $2, $3, $4, $5) RETURNING *"#,
+            self.id, self.author_id, self.category_id, self.original_message_id, self.title
+        )
+            .fetch_one(executor).await
+            .map_err(|_| HttpError::UnknownCategory) // category_id references category table
+    }
+
+    /// Deletes the thread.
+    ///
+    /// ## Errors
+    ///
+    /// * [`HttpError::Database`] - If the database query fails.
+    pub async fn delete<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<()> {
+        sqlx::query_as!(ThreadRecord, r#"DELETE FROM threads WHERE id = $1"#,
+            self.id
+        )
+            .execute(executor).await
+            .map(|_| ())
+            .map_err(|err| HttpError::Database(err))
     }
 }

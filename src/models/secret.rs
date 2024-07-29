@@ -1,12 +1,17 @@
 use {
     serde::Serialize,
+    sqlx::PgExecutor,
     base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD},
     secrecy::SecretString,
     std::time::{SystemTime, UNIX_EPOCH},
     rand::{rngs::StdRng, SeedableRng, RngCore},
-    crate::utils::{
-        convectors::to_string_radix_signed,
-        snowflake::Snowflake
+    crate::{
+        routes::HttpError,
+        utils::{
+            convectors::to_string_radix_signed,
+            snowflake::Snowflake,
+
+        }
     }
 
 };
@@ -43,6 +48,17 @@ impl Secret {
     pub fn token(&self) -> SecretString {
         serialize_user_token(self.id.into(), self.secret_timestamp(), self.secret()).into()
     }
+
+    /// Resets secrets and return new object if no conflict, otherwise return
+    pub async fn reset<'a, E: PgExecutor<'a>>(self, executor: E) -> Result<Secret, HttpError> {
+        let secrets = generate_user_secrets();
+        sqlx::query_as!(SecretRecord, r#"UPDATE secrets SET secret1 = $1, secret2 = $2, secret3 = $3 WHERE id = $4 RETURNING *"#,
+            secrets.0, secrets.1, secrets.2, self.id.0
+        )
+            .fetch_one(executor).await
+            .map(|x| Secret::from(x))
+            .map_err(|err| HttpError::Database(err))
+    }
 }
 
 impl From<SecretRecord> for Secret {
@@ -57,6 +73,7 @@ impl From<SecretRecord> for Secret {
     }
 }
 
+/// WARNING: CHANGE THIS KEY IN YOUR OWN PRODUCTION INSTANCE
 const _SECRET_KEY: i64 = 0x7E6E2C06DF6F2C6D;
 
 /// Serialize secrets.
