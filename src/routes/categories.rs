@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use {
     actix_web::{
         web, HttpResponse, HttpRequest,
@@ -8,13 +9,16 @@ use {
         AppData,
         routes::{Result, HttpError},
         models::{
-            category::Category,
+            category::{Category, CategoryRecord},
             user::Permissions,
-            requests::{CreateCategoryPayload, ModifyCategoryPayload}
+            requests::{CreateCategoryPayload, CreateThreadPayload},
+            message::{Message, MessageFlags, MessageRecord},
+            thread::{Thread, ThreadRecord}
         },
         utils::authorization::extract_header
     }
 };
+use crate::utils::snowflake::Snowflake;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -22,6 +26,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .route("{category_id}", web::get().to(get_category))
             // .route("{category_id}", web::patch().to(modify_category))
             .route("", web::post().to(create_category))
+            .route("{category_id}", web::delete().to(delete_category))
+            .route("{category_id}/threads", web::post().to(create_thread))
     );
 }
 
@@ -29,11 +35,11 @@ async fn get_category(
     category_id: web::Path<i64>,
     app: web::Data<AppData>,
 ) -> Result<HttpResponse> {
-    let category = app.database.fetch_category(category_id.into_inner().into())
-        .await.ok_or(HttpError::UnknownCategory)?;
+    let category = app.database.fetch_category(category_id.into_inner().into()).await
+        .ok_or(HttpError::UnknownCategory)?;
 
-    let user = app.database.fetch_user(category.owner_id.into())
-        .await.ok_or(HttpError::UnknownUser)?;
+    let user = app.database.fetch_user(category.owner_id.into()).await
+        .ok_or(HttpError::UnknownUser)?;
 
     Ok(HttpResponse::Ok().json(Category::from(category, user)))
 }
@@ -55,18 +61,77 @@ async fn create_category(
         .map_err(|err| HttpError::Validation(err))?;
 
     let id = app.snowflake.lock().unwrap().build();
-    app.database.create_category(id, user.id, payload.into_inner())
+    CategoryRecord {
+        id: id.0,
+        title: payload.title.clone(),
+        description: payload.description.clone(),
+        owner_id: user.id.0,
+        locked: payload.is_locked
+    }.save(&app.pool).await
+        .map(|row| HttpResponse::Ok().json(Category::from(row, user)))
+}
+
+async fn create_thread(
+    request: HttpRequest,
+    payload: web::Json<CreateThreadPayload>,
+    app: web::Data<AppData>,
+) -> Result<HttpResponse> {
+    let token = extract_header(&request, AUTHORIZATION)?;
+    let user = app.database.fetch_user_by_token(token).await?;
+
+    if !user.clone().has_permission(Permissions::CREATE_THREADS) {
+        return Err(HttpError::MissingAccess)
+    }
+
+    payload
+        .validate()
+        .map_err(|err| HttpError::Validation(err))?;
+
+    let id = app.snowflake.lock().unwrap().build();
+    let mut tx = app.pool.begin().await?;
+
+    let message = MessageRecord {
+        id: id.0,
+        content: payload.content.clone(),
+        thread_id: id.0,
+        flags: MessageFlags::UNDELETEABLE.bits(),
+        author_id: user.id.0,
+        referenced_message_id: None,
+        updated_at: None
+    }.save(&mut *tx).await
+        .map(|row| Message::from(row, user.clone()))?;
+
+    let thread = ThreadRecord {
+        id: id.0,
+        author_id: user.id.0,
+        title: payload.title.clone(),
+        category_id: payload.category_id.into(),
+        original_message_id: id.0,
+        flags: 0
+    }.save(&mut *tx).await
+        .map(|row| Thread::from(row, user, message))?;
+
+    tx.commit()
         .await
-        .map(|record| HttpResponse::Ok().json(Category::from(record, user)))
+        .map(|_| HttpResponse::Ok().json(thread))
         .map_err(|err| HttpError::Database(err))
 }
 
-// async fn modify_category(
-//     payload: web::Json<ModifyCategoryPayload>,
-//     app: web::Data<AppData>,
-// ) -> Result<HttpResponse> {
-//     payload
-//         .validate()
-//         .map_err(|err| HttpError::Validation(err))?;
-//
-// }
+async fn delete_category(
+    request: HttpRequest,
+    category_id: web::Path<Snowflake>,
+    app: web::Data<AppData>
+) -> Result<HttpResponse> {
+    let token = extract_header(&request, AUTHORIZATION)?;
+    let user = app.database.fetch_user_by_token(token).await?;
+    let category = app.database.fetch_category(category_id.to_owned()).await
+        .ok_or(HttpError::UnknownCategory)?;
+
+    if !user.has_permission(Permissions::MANAGE_CATEGORIES) {
+        return Err(HttpError::MissingAccess);
+    }
+
+    category.delete(&app.pool).await?;
+
+    Ok(HttpResponse::NoContent().finish())
+}

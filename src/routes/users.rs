@@ -24,8 +24,8 @@ async fn get_current_user(
 ) -> Result<HttpResponse> {
     let token = extract_header(&request, AUTHORIZATION)?;
 
-    app.database.fetch_user_by_token(token)
-        .await.map(|user| HttpResponse::Ok().json(user))
+    app.database.fetch_user_by_token(token).await
+        .map(|x| HttpResponse::Ok().json(x))
 }
 
 async fn get_user(
@@ -34,5 +34,5 @@ async fn get_user(
 ) -> Result<HttpResponse> {
     app.database.fetch_user(user_id.into_inner().into())
         .await.ok_or(HttpError::UnknownUser)
-        .map(|user| HttpResponse::Ok().json(user))
+        .map(|x| HttpResponse::Ok().json(x))
 }

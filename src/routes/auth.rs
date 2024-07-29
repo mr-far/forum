@@ -9,11 +9,11 @@ use {
         routes::{HttpError, Result},
         models::{
             requests::RegisterPayload,
+            secret::Secret,
             user::User
         }
     }
 };
-use crate::models::secret::Secret;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -36,7 +36,7 @@ async fn register(
         .validate()
         .map_err(|err| HttpError::Validation(err))?;
 
-    if app.database.fetch_user_by_username(payload.username.clone()).await.is_some() {
+    if app.database.fetch_user_by_username(payload.username.as_str()).await.is_some() {
         return Err(HttpError::TakenUsername)
     }
 
@@ -47,11 +47,11 @@ async fn register(
 
     let id = app.snowflake.lock().unwrap().build();
 
-    let user = app.database.create_user(id, payload.username.clone(), payload.display_name.clone())
-        .await.map(|user| User::from(user))
+    let user = app.database.create_user(id, payload.username.as_str(), payload.display_name.as_str()).await
+        .map(|x| User::from(x))
         .map_err(|err| HttpError::Database(err))?;
-    let secret = app.database.create_secret(id, payload.password.clone())
-        .await.map(|secret| Secret::from(secret))
+    let secret = app.database.create_secret(id, payload.password.as_str()).await
+        .map(|secret| Secret::from(secret))
         .map_err(|err| HttpError::Database(err))?;
 
     let token = secret.token().expose_secret().to_owned();

@@ -18,6 +18,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         web::scope("api/v1")
             .configure(users::config)
             .configure(categories::config)
+            .configure(threads::config)
             .configure(auth::config),
     );
 }
@@ -56,6 +57,8 @@ pub enum HttpError {
     Unauthorized,
     #[error("Invalid credentials: {0}")]
     InvalidCredentials(String),
+    #[error("Resource can't be deleted due to its policy")]
+    Undeletable
 }
 
 impl actix_web::ResponseError for HttpError {
@@ -68,7 +71,8 @@ impl actix_web::ResponseError for HttpError {
             | HttpError::Header(..)
             | HttpError::TakenUsername
             | HttpError::WeekPassword
-            | HttpError::InvalidCredentials(..) => StatusCode::BAD_REQUEST,
+            | HttpError::InvalidCredentials(..)
+            | HttpError::Undeletable => StatusCode::BAD_REQUEST,
 
             HttpError::Unauthorized => StatusCode::UNAUTHORIZED,
 
@@ -100,6 +104,7 @@ impl actix_web::ResponseError for HttpError {
                 HttpError::Validation(..) => 20004,
                 HttpError::InvalidCredentials(..) => 20005,
                 HttpError::Database(..) => 20007,
+                HttpError::Undeletable => 20009,
                 HttpError::TakenUsername => 20010,
 
                 // The 3xxxx class of error code indicates that authorization process failed
