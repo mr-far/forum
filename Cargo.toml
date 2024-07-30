@@ -31,5 +31,4 @@ secrecy = { version = "0.8.0", features = ["alloc", "serde"] }
 base64 = "0.22.1"
 nanoid = "0.4.0"
 rand = "0.8.5"
-once_cell = "1.19.0"
 regex = "1.10.5"
