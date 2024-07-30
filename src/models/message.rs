@@ -1,4 +1,3 @@
-use serde_json::{from_value, Value};
 use {
     sqlx::PgExecutor,
     bitflags::bitflags,
@@ -13,7 +12,7 @@ use {
 };
 
 /// Represents a message record stored in the database.
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct MessageRecord {
     pub id: i64,
     pub content: String,
@@ -24,9 +23,10 @@ pub struct MessageRecord {
     pub updated_at: Option<DateTime<Utc>>
 }
 
+#[derive(Debug, Clone)]
 pub struct BigMessageRecord {
-    pub message: Value,
-    pub user: Value
+    pub message: MessageRecord,
+    pub user: User
 }
 
 bitflags! {
@@ -80,11 +80,7 @@ impl Message {
         self.flags.contains(flag)
     }
 
-    /// Create a new message or messages from the given records. Multiple records are linked together by their ID.
-    ///
-    /// ## Errors
-    ///
-    /// * [`BuildError`] - If the records are invalid
+    /// Create a new message or messages from the given rows.
     pub fn from_rows(rows: &[BigMessageRecord]) -> Vec<Self> {
         if rows.is_empty() {
             return Vec::new();
@@ -92,7 +88,7 @@ impl Message {
 
         rows
             .iter()
-            .map(|row| Message::from(from_value(row.message[0].clone()).unwrap(), from_value(row.user[0].clone()).unwrap()))
+            .map(|row| Message::from(row.message.clone(), row.user.clone()))
             .collect()
     }
 }

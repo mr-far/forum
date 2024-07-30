@@ -106,11 +106,11 @@ impl User {
 impl UserRecord {
     /// Saves a new user in the database.
     ///
-    /// ## Returns
+    /// ### Returns
     ///
     /// * [`UserRecord`] on success, otherwise [`HttpError`].
     ///
-    /// ## Errors
+    /// ### Errors
     ///
     /// * [`HttpError::Database`] - If the database query fails.
     pub async fn save<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<Self> {
@@ -123,7 +123,7 @@ impl UserRecord {
 
     /// Deletes the user.
     ///
-    /// ## Errors
+    /// ### Errors
     ///
     /// * [`HttpError::Database`] - If the database query fails.
     pub async fn delete<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<()> {

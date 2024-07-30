@@ -49,11 +49,11 @@ impl Category {
 impl CategoryRecord {
     /// Saves a new category in the database.
     ///
-    /// ## Returns
+    /// ### Returns
     ///
     /// * [`CategoryRecord`] on success, otherwise [`HttpError`].
     ///
-    /// ## Errors
+    /// ### Errors
     ///
     /// * [`HttpError::Database`] - If the database query fails.
     pub async fn save<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<Self> {
@@ -66,7 +66,7 @@ impl CategoryRecord {
 
     /// Deletes the category.
     ///
-    /// ## Errors
+    /// ### Errors
     ///
     /// * [`HttpError::Database`] - If the database query fails.
     pub async fn delete<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<()> {

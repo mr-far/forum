@@ -77,11 +77,11 @@ impl Thread {
 impl ThreadRecord {
     /// Saves a new thread in the database.
     ///
-    /// ## Returns
+    /// ### Returns
     ///
     /// * [`ThreadRecord`] on success, otherwise [`HttpError`].
     ///
-    /// ## Errors
+    /// ### Errors
     ///
     /// * [`HttpError::UnknownCategory`] - If the category the thread will be created in is not found.
     pub async fn save<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<Self> {
@@ -94,7 +94,7 @@ impl ThreadRecord {
 
     /// Deletes the thread.
     ///
-    /// ## Errors
+    /// ### Errors
     ///
     /// * [`HttpError::Database`] - If the database query fails.
     pub async fn delete<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<()> {
