@@ -28,6 +28,12 @@ pub struct RegisterResponse {
     pub token: String
 }
 
+/// Create a new user and return [`RegisterResponse`] - `POST /register`
+///
+/// ### Errors
+///
+/// * [`HttpError::TakenUsername`] - If the username has already been taken
+/// * [`HttpError::WeekPassword`] - If the password is too week
 async fn register(
     payload: web::Json<RegisterPayload>,
     app: web::Data<AppData>,
@@ -48,10 +54,10 @@ async fn register(
     let id = app.snowflake.lock().unwrap().build();
 
     let user = app.database.create_user(id, payload.username.as_str(), payload.display_name.as_str()).await
-        .map(|x| User::from(x))
+        .map(|row| User::from(row))
         .map_err(|err| HttpError::Database(err))?;
     let secret = app.database.create_secret(id, payload.password.as_str()).await
-        .map(|secret| Secret::from(secret))
+        .map(|row| Secret::from(row))
         .map_err(|err| HttpError::Database(err))?;
 
     let token = secret.token().expose_secret().to_owned();

@@ -1,4 +1,3 @@
-use serde::Deserialize;
 use {
     actix_web::{
         web, HttpResponse, HttpRequest,
@@ -15,10 +14,12 @@ use {
             message::{Message, MessageFlags, MessageRecord},
             thread::{Thread, ThreadRecord}
         },
-        utils::authorization::extract_header
+        utils::{
+            authorization::extract_header,
+            snowflake::Snowflake
+        }
     }
 };
-use crate::utils::snowflake::Snowflake;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -31,6 +32,12 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     );
 }
 
+///  Returns [`Category`] by given ID - `GET /categories/{category_id}`
+///
+/// ### Errors
+///
+/// * [`HttpError::UnknownUser`] - If the owner of the category is not found
+/// * [`HttpError::UnknownCategory`] - If the category is not found
 async fn get_category(
     category_id: web::Path<i64>,
     app: web::Data<AppData>,
@@ -44,6 +51,13 @@ async fn get_category(
     Ok(HttpResponse::Ok().json(Category::from(category, user)))
 }
 
+/// Create a new category and return [`Category`] - `POST /categories`
+///
+/// ### Errors
+///
+/// * [`HttpError::MissingAccess`] - If the user does not have [`Permissions::MANAGE_CATEGORIES`]
+/// * [`HttpError::Validation`] - If the payload is malformed or doesn't follow requirements
+/// * [`HttpError::Database`] - If the database query fails
 async fn create_category(
     request: HttpRequest,
     payload: web::Json<CreateCategoryPayload>,
@@ -71,6 +85,13 @@ async fn create_category(
         .map(|row| HttpResponse::Ok().json(Category::from(row, user)))
 }
 
+/// Create a new thread and return [`Thread`] - `POST /categories/threads`
+///
+/// ### Errors
+///
+/// * [`HttpError::MissingAccess`] - If the user does not have [`Permissions::CREATE_THREADS`]
+/// * [`HttpError::Validation`] - If the payload is malformed or doesn't follow requirements
+/// * [`HttpError::Database`] - If the database query fails
 async fn create_thread(
     request: HttpRequest,
     payload: web::Json<CreateThreadPayload>,
@@ -117,6 +138,11 @@ async fn create_thread(
         .map_err(|err| HttpError::Database(err))
 }
 
+/// Delete a category - `DELETE /categories/{category_id}`
+///
+/// ### Path
+///
+/// * `category_id` - The ID of the category to delete
 async fn delete_category(
     request: HttpRequest,
     category_id: web::Path<Snowflake>,

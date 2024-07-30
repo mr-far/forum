@@ -18,6 +18,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     );
 }
 
+/// Returns current [`User`] - `GET /users/@me`
 async fn get_current_user(
     request: HttpRequest,
     app: web::Data<AppData>,
@@ -25,14 +26,19 @@ async fn get_current_user(
     let token = extract_header(&request, AUTHORIZATION)?;
 
     app.database.fetch_user_by_token(token).await
-        .map(|x| HttpResponse::Ok().json(x))
+        .map(|row| HttpResponse::Ok().json(row))
 }
 
+///  Returns [`User`] by given ID - `GET /users/{user_id}`
+///
+/// ### Errors
+///
+/// * [`HttpError::UnknownUser`] - If the user is not found
 async fn get_user(
     user_id: web::Path<i64>,
     app: web::Data<AppData>,
 ) -> Result<HttpResponse> {
     app.database.fetch_user(user_id.into_inner().into())
         .await.ok_or(HttpError::UnknownUser)
-        .map(|x| HttpResponse::Ok().json(x))
+        .map(|row| HttpResponse::Ok().json(row))
 }
