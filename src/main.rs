@@ -1,11 +1,13 @@
 use {
     actix_web::{web, App, HttpServer},
+    tokio::sync::broadcast::Sender,
+    std::collections::HashMap,
     env_logger::Env,
     log::info,
     sqlx::PgPool,
     forum::{
         routes,
-        AppData,
+        App as AppData,
         utils::snowflake::{EPOCH, SnowflakeBuilder},
         models::database::DatabaseManager
     },
@@ -21,12 +23,15 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to connect to database");
 
+    let channel = Sender::new(16384);
     let data = web::Data::new(AppData {
         snowflake: SnowflakeBuilder {
             epoch: EPOCH,
             worker_id: 1,
             increment: 0,
         }.into(),
+        channel,
+        online: HashMap::new(),
         database: DatabaseManager::new(pool.clone()),
         pool: pool.clone()
     });
