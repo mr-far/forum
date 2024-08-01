@@ -36,7 +36,7 @@ bitflags! {
 
 bitflags_serde_impl!(ThreadFlags, i32);
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Thread {
     /// The ID of the thread
     pub id: Snowflake,

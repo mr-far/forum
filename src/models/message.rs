@@ -1,3 +1,4 @@
+use serde_json::{from_value, Value};
 use {
     sqlx::PgExecutor,
     bitflags::bitflags,
@@ -25,8 +26,8 @@ pub struct MessageRecord {
 
 #[derive(Debug, Clone)]
 pub struct BigMessageRecord {
-    pub message: MessageRecord,
-    pub user: User
+    pub message: Value,
+    pub user: Value
 }
 
 bitflags! {
@@ -41,7 +42,7 @@ bitflags! {
 
 bitflags_serde_impl!(MessageFlags, i32);
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Message {
     /// The ID of the message
     pub id: Snowflake,
@@ -88,7 +89,7 @@ impl Message {
 
         rows
             .iter()
-            .map(|row| Message::from(row.message.clone(), row.user.clone()))
+            .map(|row| Message::from(from_value(row.message.clone()).unwrap(), from_value(row.user.clone()).unwrap()))
             .collect()
     }
 }

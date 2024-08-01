@@ -5,7 +5,7 @@ use {
     crate::{
         models::{
             category::CategoryRecord,
-            message::{MessageRecord},
+            message::MessageRecord,
             thread::ThreadRecord,
             secret::{
                 Secret, SecretRecord, generate_user_secrets,

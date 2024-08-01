@@ -6,3 +6,4 @@ pub mod thread;
 pub mod message;
 pub mod requests;
 pub mod secret;
+pub mod gateway;

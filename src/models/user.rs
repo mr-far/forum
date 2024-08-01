@@ -3,7 +3,7 @@ use {
     bitflags::bitflags,
     serde::{Serialize, Deserialize},
     crate::{
-        AppData,
+        App,
         bitflags_serde_impl,
         models::secret::Secret,
         utils::snowflake::Snowflake,
@@ -97,7 +97,7 @@ impl User {
     }
 
     /// Returns user secret
-    pub async fn secret(&self, app: &AppData) -> Result<Secret, HttpError> {
+    pub async fn secret(&self, app: &App) -> Result<Secret, HttpError> {
         app.database.fetch_secret(self.id)
             .await.ok_or(HttpError::Unauthorized)
     }
