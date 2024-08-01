@@ -12,6 +12,7 @@ mod users;
 mod categories;
 mod auth;
 mod threads;
+mod gateway;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -20,6 +21,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .configure(categories::config)
             .configure(threads::config)
             .configure(auth::config),
+    ).service(
+        web::scope("gateway")
+            .configure(gateway::config)
     );
 }
 

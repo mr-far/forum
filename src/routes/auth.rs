@@ -5,7 +5,7 @@ use {
     serde::Serialize,
     regex::Regex,
     crate::{
-        AppData,
+        App,
         routes::{HttpError, Result},
         models::{
             requests::RegisterPayload,
@@ -36,7 +36,7 @@ pub struct RegisterResponse {
 /// * [`HttpError::WeekPassword`] - If the password is too week
 async fn register(
     payload: web::Json<RegisterPayload>,
-    app: web::Data<AppData>,
+    app: web::Data<App>,
 ) -> Result<HttpResponse> {
     payload
         .validate()

@@ -6,12 +6,14 @@ use {
     validator::Validate,
     serde::Deserialize,
     crate::{
-        AppData,
+        App,
+        DispatchTarget,
         routes::{Result, HttpError},
         models::{
             user::Permissions,
             requests::{CreateMessagePayload, ModifyMessagePayload},
             message::{Message, MessageRecord, MessageFlags},
+            gateway::GatewayEvent::{MessageCreate, MessageDelete, MessageUpdate, ThreadDelete},
             thread::Thread
         },
         utils::{
@@ -46,7 +48,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 /// * [`HttpError::UnknownMessage`] - If the original message of the thread is not found
 async fn get_thread(
     category_id: web::Path<i64>,
-    app: web::Data<AppData>,
+    app: web::Data<App>,
 ) -> Result<HttpResponse> {
     let thread = app.database.fetch_thread(category_id.into_inner().into())
         .await.ok_or(HttpError::UnknownCategory)?;
@@ -67,7 +69,7 @@ async fn get_thread(
 async fn delete_thread(
     request: HttpRequest,
     thread_id: web::Path<i64>,
-    app: web::Data<AppData>
+    app: web::Data<App>
 ) -> Result<HttpResponse> {
     let token = extract_header(&request, AUTHORIZATION)?;
     let user = app.database.fetch_user_by_token(token).await?;
@@ -77,6 +79,8 @@ async fn delete_thread(
     if user.id.0 != thread.author_id && !user.has_permission(Permissions::MANAGE_THREADS) {
         return Err(HttpError::MissingAccess);
     }
+
+    _ = app.dispatch(DispatchTarget::Global, ThreadDelete {category_id: thread.category_id.into(), thread_id: thread_id.to_owned().into()});
 
     thread.delete(&app.pool).await?;
 
@@ -105,7 +109,7 @@ async fn get_messages(
     request: HttpRequest,
     path: web::Path<i64>,
     query: web::Query<SearchMessagesQuery>,
-    app: web::Data<AppData>,
+    app: web::Data<App>,
 ) -> Result<HttpResponse> {
     let token = extract_header(&request, AUTHORIZATION)?;
     app.database.fetch_user_by_token(token).await?;
@@ -129,7 +133,7 @@ async fn get_messages(
 async fn get_message(
     request: HttpRequest,
     path: web::Path<(i64, i64)>,
-    app: web::Data<AppData>
+    app: web::Data<App>
 ) -> Result<HttpResponse> {
     let token = extract_header(&request, AUTHORIZATION)?;
     let user = app.database.fetch_user_by_token(token).await?;
@@ -154,7 +158,7 @@ async fn create_message(
     request: HttpRequest,
     thread_id: web::Path<i64>,
     payload: web::Json<CreateMessagePayload>,
-    app: web::Data<AppData>
+    app: web::Data<App>
 ) -> Result<HttpResponse> {
     let token = extract_header(&request, AUTHORIZATION)?;
     let user = app.database.fetch_user_by_token(token).await?;
@@ -178,7 +182,9 @@ async fn create_message(
         referenced_message_id: payload.referenced_message_id.map(|x| x.into()),
         updated_at: None
     }.save(&app.pool).await
-        .map(|row| Message::from(row, user))?;
+        .map(|row| Message::from(row, user.clone()))?;
+
+    _ = app.dispatch(DispatchTarget::Thread(message.id), MessageCreate(message.clone()));
 
     Ok(HttpResponse::Ok().json(message))
 }
@@ -198,7 +204,7 @@ async fn modify_message(
     request: HttpRequest,
     path: web::Path<(i64, i64)>,
     payload: web::Json<ModifyMessagePayload>,
-    app: web::Data<AppData>
+    app: web::Data<App>
 ) -> Result<HttpResponse> {
     let token = extract_header(&request, AUTHORIZATION)?;
     let user = app.database.fetch_user_by_token(token).await?;
@@ -211,6 +217,9 @@ async fn modify_message(
 
     let message = app.database.update_message(path.into_inner().1.into(), payload.into_inner()).await
         .map(|row| Message::from(row, user))?;
+
+    _ = app.dispatch(DispatchTarget::Thread(message.id), MessageUpdate(message.clone()));
+
     Ok(HttpResponse::Ok().json(message))
 }
 
@@ -229,7 +238,7 @@ async fn modify_message(
 async fn delete_message(
     request: HttpRequest,
     path: web::Path<(i64, i64)>,
-    app: web::Data<AppData>
+    app: web::Data<App>
 ) -> Result<HttpResponse> {
     let token = extract_header(&request, AUTHORIZATION)?;
     let user = app.database.fetch_user_by_token(token).await?;
@@ -243,6 +252,8 @@ async fn delete_message(
     if message.is(MessageFlags::UNDELETEABLE) {
         return Err(HttpError::Undeletable)
     }
+
+    _ = app.dispatch(DispatchTarget::Thread(message.id.into()), MessageDelete {thread_id: message.clone().thread_id.into(), message_id: message.clone().id.into()});
 
     message.delete(&app.pool).await?;
 

@@ -5,7 +5,7 @@ use {
     },
     validator::Validate,
     crate::{
-        AppData,
+        App,
         routes::{Result, HttpError},
         models::{
             category::{Category, CategoryRecord},
@@ -40,7 +40,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 /// * [`HttpError::UnknownCategory`] - If the category is not found
 async fn get_category(
     category_id: web::Path<i64>,
-    app: web::Data<AppData>,
+    app: web::Data<App>,
 ) -> Result<HttpResponse> {
     let category = app.database.fetch_category(category_id.into_inner().into()).await
         .ok_or(HttpError::UnknownCategory)?;
@@ -61,7 +61,7 @@ async fn get_category(
 async fn create_category(
     request: HttpRequest,
     payload: web::Json<CreateCategoryPayload>,
-    app: web::Data<AppData>,
+    app: web::Data<App>,
 ) -> Result<HttpResponse> {
     let token = extract_header(&request, AUTHORIZATION)?;
     let user = app.database.fetch_user_by_token(token).await?;
@@ -95,7 +95,7 @@ async fn create_category(
 async fn create_thread(
     request: HttpRequest,
     payload: web::Json<CreateThreadPayload>,
-    app: web::Data<AppData>,
+    app: web::Data<App>,
 ) -> Result<HttpResponse> {
     let token = extract_header(&request, AUTHORIZATION)?;
     let user = app.database.fetch_user_by_token(token).await?;
@@ -146,7 +146,7 @@ async fn create_thread(
 async fn delete_category(
     request: HttpRequest,
     category_id: web::Path<Snowflake>,
-    app: web::Data<AppData>
+    app: web::Data<App>
 ) -> Result<HttpResponse> {
     let token = extract_header(&request, AUTHORIZATION)?;
     let user = app.database.fetch_user_by_token(token).await?;

@@ -4,7 +4,7 @@ use {
         http::header::AUTHORIZATION
     },
     crate::{
-        AppData,
+        App,
         routes::{Result, HttpError},
         utils::authorization::extract_header
     }
@@ -21,7 +21,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 /// Returns current [`User`] - `GET /users/@me`
 async fn get_current_user(
     request: HttpRequest,
-    app: web::Data<AppData>,
+    app: web::Data<App>,
 ) -> Result<HttpResponse> {
     let token = extract_header(&request, AUTHORIZATION)?;
 
@@ -36,7 +36,7 @@ async fn get_current_user(
 /// * [`HttpError::UnknownUser`] - If the user is not found
 async fn get_user(
     user_id: web::Path<i64>,
-    app: web::Data<AppData>,
+    app: web::Data<App>,
 ) -> Result<HttpResponse> {
     app.database.fetch_user(user_id.into_inner().into())
         .await.ok_or(HttpError::UnknownUser)
