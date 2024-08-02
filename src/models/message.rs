@@ -24,6 +24,7 @@ pub struct MessageRecord {
     pub updated_at: Option<DateTime<Utc>>
 }
 
+// TODO: Add super cool structure-value deserializer
 #[derive(Debug, Clone)]
 pub struct BigMessageRecord {
     pub message: Value,
@@ -81,7 +82,7 @@ impl Message {
         self.flags.contains(flag)
     }
 
-    /// Create a new message or messages from the given rows.
+    /// Create a list of messages from the given rows.
     pub fn from_rows(rows: &[BigMessageRecord]) -> Vec<Self> {
         if rows.is_empty() {
             return Vec::new();
@@ -89,6 +90,7 @@ impl Message {
 
         rows
             .iter()
+            // TODO: Fix message creation
             .map(|row| Message::from(from_value(row.message.clone()).unwrap(), from_value(row.user.clone()).unwrap()))
             .collect()
     }
