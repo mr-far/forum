@@ -22,8 +22,7 @@ pub mod models;
 #[derive(Clone)]
 pub enum DispatchTarget {
     Global,
-    User(Snowflake),
-    Thread(Snowflake)
+    User(Snowflake)
 }
 
 pub struct App {
