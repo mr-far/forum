@@ -103,12 +103,11 @@ impl GatewayConnection {
                 },
                 message = receiver.recv() => {
                     match message {
-                        Ok((target, event)) => if let (Some(user), Some(thread)) = (self.user.clone(), self.thread.clone()) {
+                        Ok((target, event)) => if let Some(user) = self.user.clone() {
                             match target {
                                 DispatchTarget::Global => self.dispatch(event).await?,
                                 DispatchTarget::User(target_id) if user.id == target_id => self.dispatch(event).await?,
-                                DispatchTarget::Thread(thread_id) if thread.id == thread_id => self.dispatch(event).await?,
-                                _ => {},
+                                _ => (),
                             }
                         },
                         Err(err) => if matches!(err, RecvError::Closed) {
@@ -119,17 +118,18 @@ impl GatewayConnection {
                 Some(message) = self.stream.next() => {
                     let packet = match message.map_err(GatewayError::WebSocketError)? {
                         actix_ws::Message::Text(text) => serde_json::from_str::<IncomingGatewayPacket>(&text).map_err(GatewayError::Decode),
-                        actix_ws::Message::Close(..) => return Ok(()),
+                        actix_ws::Message::Close(..) => {
+                            if let Some(_) = self.user.clone() {
+                                //self.app.online.remove(&user.id.clone());
+                            }
+
+                            return Err(GatewayError::Closed)
+                        },
                         _ => Err(GatewayError::UnsupportedMessageType),
                     }?;
                     self.handle(packet).await?;
                 },
-                else => {
-                    if let Some(_) = self.user.clone() {
-                        //self.app.online.remove(&user.id.clone());
-                    }
-                    break
-                },
+                else => break
             }
         }
         Ok(())
