@@ -33,8 +33,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
                     .route("", web::post().to(create_message))
                     .route("", web::get().to(get_messages))
                     .route("{message_id}", web::patch().to(get_message))
-                    .route("{message_id}", web::delete().to(delete_message))
                     .route("{message_id}", web::patch().to(modify_message))
+                    .route("{message_id}", web::delete().to(delete_message))
             )
     );
 }
@@ -184,7 +184,8 @@ async fn create_message(
     }.save(&app.pool).await
         .map(|row| Message::from(row, user.clone()))?;
 
-    _ = app.dispatch(DispatchTarget::Thread(message.id), MessageCreate(message.clone()));
+    _ = app.dispatch(DispatchTarget::Global, MessageCreate(message.clone()));
+    _ = app.dispatch(DispatchTarget::User(user.id), MessageCreate(message.clone()));
 
     Ok(HttpResponse::Ok().json(message))
 }
@@ -218,7 +219,7 @@ async fn modify_message(
     let message = app.database.update_message(path.into_inner().1.into(), payload.into_inner()).await
         .map(|row| Message::from(row, user))?;
 
-    _ = app.dispatch(DispatchTarget::Thread(message.id), MessageUpdate(message.clone()));
+    _ = app.dispatch(DispatchTarget::Global, MessageUpdate(message.clone()));
 
     Ok(HttpResponse::Ok().json(message))
 }
@@ -253,7 +254,7 @@ async fn delete_message(
         return Err(HttpError::Undeletable)
     }
 
-    _ = app.dispatch(DispatchTarget::Thread(message.id.into()), MessageDelete {thread_id: message.clone().thread_id.into(), message_id: message.clone().id.into()});
+    _ = app.dispatch(DispatchTarget::Global, MessageDelete {thread_id: message.clone().thread_id.into(), message_id: message.clone().id.into()});
 
     message.delete(&app.pool).await?;
 
