@@ -18,6 +18,8 @@ use {
 pub enum GatewayError {
     #[error("Decode error: {0}")]
     Decode(#[from] serde_json::Error),
+    #[error("Unknown error")]
+    UnknownError,
     #[error("WebSocket error: {0}")]
     WebSocketError(#[from] ProtocolError),
     #[error("Unsupported message type")]
@@ -39,11 +41,12 @@ pub enum GatewayError {
 impl GatewayError {
     fn close_code(&self) -> CloseCode {
         match self {
-            GatewayError::Inactive => CloseCode::Normal,
+            GatewayError::Inactive => CloseCode::Away,
             GatewayError::Closed => CloseCode::Normal,
+            GatewayError::UnsupportedMessageType => CloseCode::Unsupported,
 
             GatewayError::WebSocketError(..) => CloseCode::Other(4000),
-            GatewayError::UnsupportedMessageType => CloseCode::Other(4001),
+            GatewayError::UnknownError => CloseCode::Other(4001),
             GatewayError::Decode(..) => CloseCode::Other(4002),
             GatewayError::NotAuthenticated => CloseCode::Other(4003),
             GatewayError::AuthenticationFail => CloseCode::Other(4004),
