@@ -1,9 +1,12 @@
 use {
-    sqlx::PgExecutor,
     bitflags::bitflags,
     serde::{Serialize, Deserialize},
+    sqlx::{
+        Decode, Postgres, PgExecutor,
+        postgres::PgValueRef
+    },
     crate::{
-        bitflags_serde_impl,
+        bitflags_convector,
         models::{
             message::Message, user::User
         },
@@ -34,7 +37,7 @@ bitflags! {
     }
 }
 
-bitflags_serde_impl!(ThreadFlags, i32);
+bitflags_convector!(ThreadFlags, i32);
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Thread {
@@ -50,6 +53,15 @@ pub struct Thread {
     pub flags: ThreadFlags,
     /// The message the thread is referenced to
     pub original_message: Message
+}
+
+impl Decode<'_, Postgres> for Thread {
+    fn decode(
+        value: PgValueRef<'_>,
+    ) -> Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
+        let s: sqlx::types::Json<Thread> =  sqlx::Decode::<'_, Postgres>::decode(value)?;
+        Ok(s.0)
+    }
 }
 
 impl Thread {

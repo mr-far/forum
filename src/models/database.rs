@@ -11,22 +11,21 @@ use {
                 Secret, SecretRecord, generate_user_secrets,
                 serialize_secret_timestamp, serialize_user_secret, serialize_user_token
             },
-            user::{User, UserRecord},
-            requests::ModifyMessagePayload
+            user::User,
+            message::Message
         },
         routes::HttpError,
         utils::snowflake::Snowflake
     },
 };
-use crate::models::message::{BigMessageRecord, Message};
 
 #[derive(Clone)]
-pub struct DatabaseManager {
+pub struct Database {
     pool: PgPool,
 }
 
 /// Application Database Manager
-impl DatabaseManager {
+impl Database {
     /// Create a new application database manager
     pub const fn new(pool: PgPool) -> Self {
         Self { pool }
@@ -42,10 +41,9 @@ impl DatabaseManager {
     ///
     /// * [`User`] if found, otherwise `None`.
     pub async fn fetch_user(&self, user_id: Snowflake) -> Option<User> {
-        sqlx::query_as!(UserRecord, "SELECT * FROM users WHERE id = $1", user_id.0)
+        sqlx::query_as!(User, "SELECT * FROM users WHERE id = $1", user_id.0)
             .fetch_optional(&self.pool)
             .await.ok()?
-            .map(|x| User::from(x))
     }
 
     /// Fetch a user from the database by their username.
@@ -58,10 +56,9 @@ impl DatabaseManager {
     ///
     /// * [`User`] if found, otherwise `None`.
     pub async fn fetch_user_by_username(&self, username: &str) -> Option<User> {
-        sqlx::query_as!(UserRecord, "SELECT * FROM users WHERE username = $1", username)
+        sqlx::query_as!(User, "SELECT * FROM users WHERE username = $1", username)
             .fetch_optional(&self.pool)
             .await.ok()?
-            .map(|x| User::from(x))
     }
 
     /// Fetch a user from the database by their auth token.
@@ -168,17 +165,21 @@ impl DatabaseManager {
     pub async fn fetch_messages(&self, thread_id: Snowflake, limit: Option<u16>, before: Option<Snowflake>, after: Option<Snowflake>) -> Result<Vec<Message>, sqlx::Error> {
         let limit = limit.unwrap_or(50).min(100);
         let rows = if before.is_none() && after.is_none() {
-            sqlx::query_as!(BigMessageRecord, r#"
-                   SELECT row_to_json(m) AS message, row_to_json(u) AS user
-                   FROM messages m LEFT JOIN users u ON m.author_id = u.id
+            sqlx::query_as!(Message, r#"
+                   SELECT m.id, m.content, m.thread_id, m.flags, m.referenced_message_id, m.updated_at,
+                   (u.id, u.username, u.display_name, u.bio, u.flags, u.permissions) AS "author!: User"
+                   FROM messages m JOIN users u ON m.author_id = u.id
                    WHERE thread_id = $1
-                   ORDER BY m.id DESC LIMIT $2"#, thread_id.0, i64::from(limit))
+                   ORDER BY m.id DESC LIMIT $2"#,
+                thread_id.0, i64::from(limit)
+            )
                 .fetch_all(&self.pool)
                 .await?
         } else {
-            sqlx::query_as!(BigMessageRecord, r#"
-                   SELECT row_to_json(m) AS message, row_to_json(u) AS user
-                   FROM messages m LEFT JOIN users u ON m.author_id = u.id
+            sqlx::query_as!(Message, r#"
+                   SELECT m.id, m.content, m.thread_id, m.flags, m.referenced_message_id, m.updated_at,
+                   (u.id, u.username, u.display_name, u.bio, u.flags, u.permissions) AS "author!: User"
+                   FROM messages m JOIN users u ON m.author_id = u.id
                    WHERE thread_id = $1 AND m.id > $2 AND m.id < $3
                    ORDER BY m.id DESC LIMIT $4"#,
                 thread_id.0, before.map_or(i64::MAX, Into::into), after.map_or(i64::MIN, Into::into), i64::from(limit)
@@ -187,7 +188,7 @@ impl DatabaseManager {
                 .await?
         };
 
-        Ok(Message::from_rows(&rows))
+        Ok(rows)
     }
 
     /// Fetch a user's secret from the database by ID.
@@ -224,8 +225,8 @@ impl DatabaseManager {
     /// ### Errors
     ///
     /// * [`sqlx::Error`] - If the database query fails.
-    pub async fn create_user(&self, id: Snowflake, username: &str, display_name: &str) -> Result<UserRecord, sqlx::Error> {
-        sqlx::query_as!(UserRecord, r#"INSERT INTO users(id, username, display_name) VALUES ($1, $2, $3) RETURNING *"#,
+    pub async fn create_user(&self, id: Snowflake, username: &str, display_name: &str) -> Result<User, sqlx::Error> {
+        sqlx::query_as!(User, r#"INSERT INTO users(id, username, display_name) VALUES ($1, $2, $3) RETURNING *"#,
             id.0, username, display_name
         )
             .fetch_one(&self.pool).await
@@ -236,14 +237,14 @@ impl DatabaseManager {
     /// ### Arguments
     ///
     /// * `message_id` - The ID of the message.
-    /// * `payload` - The update payload.
+    /// * `content` - New message content.
     ///
     /// ### Errors
     ///
     /// * [`HttpError::UnknownMessage`] - If message is not found.
-    pub async fn update_message(&self, message_id: Snowflake, payload: ModifyMessagePayload) -> Result<MessageRecord, HttpError> {
+    pub async fn update_message(&self, message_id: Snowflake, content: &str) -> Result<MessageRecord, HttpError> {
         sqlx::query_as!(MessageRecord, r#"UPDATE messages SET content = $1 WHERE id = $2 RETURNING *"#,
-            payload.content, message_id.0
+            content, message_id.0
         )
             .fetch_one(&self.pool).await
             .map_err(|_| HttpError::UnknownMessage)

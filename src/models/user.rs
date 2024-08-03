@@ -1,10 +1,13 @@
 use {
-    sqlx::PgExecutor,
     bitflags::bitflags,
     serde::{Serialize, Deserialize},
+    sqlx::{
+        Decode, Postgres, PgExecutor,
+        postgres::PgValueRef
+    },
     crate::{
         App,
-        bitflags_serde_impl,
+        bitflags_convector,
         models::secret::Secret,
         utils::snowflake::Snowflake,
         routes::{HttpError, Result as HttpResult}
@@ -65,8 +68,8 @@ bitflags! {
     }
 }
 
-bitflags_serde_impl!(UserFlags, i32);
-bitflags_serde_impl!(Permissions, i64);
+bitflags_convector!(UserFlags, i32);
+bitflags_convector!(Permissions, i64);
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct User {
@@ -84,6 +87,15 @@ pub struct User {
     pub flags: UserFlags
 }
 
+
+impl Decode<'_, Postgres> for User {
+    fn decode(
+        value: PgValueRef<'_>,
+    ) -> Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
+        let s: sqlx::types::Json<User> =  sqlx::Decode::<'_, Postgres>::decode(value)?;
+        Ok(s.0)
+    }
+}
 
 impl User {
     /// Checks whether user has required [`ThreadFlags`]
@@ -133,18 +145,5 @@ impl UserRecord {
             .execute(executor).await
             .map(|_| ())
             .map_err(|err| HttpError::Database(err))
-    }
-}
-
-impl From<UserRecord> for User {
-    fn from(x: UserRecord) -> Self {
-        Self {
-            id: Snowflake(x.id),
-            username: x.username,
-            display_name: x.display_name,
-            bio: x.bio,
-            permissions: Permissions::from_bits_retain(x.permissions),
-            flags: UserFlags::from_bits_retain(x.flags)
-        }
     }
 }

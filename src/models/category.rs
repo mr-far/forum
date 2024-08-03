@@ -1,6 +1,9 @@
 use {
-    sqlx::PgExecutor,
-    serde::Serialize,
+    sqlx::{
+        Decode, Postgres, PgExecutor,
+        postgres::PgValueRef
+    },
+    serde::{Serialize, Deserialize},
     crate::{
         models::user::User,
         utils::snowflake::Snowflake,
@@ -17,7 +20,7 @@ pub struct CategoryRecord {
     pub locked: bool
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Category {
     /// The ID of the category
     pub id: Snowflake,
@@ -29,6 +32,15 @@ pub struct Category {
     pub description: String,
     /// Whether the category is locked
     pub locked: bool
+}
+
+impl Decode<'_, Postgres> for Category {
+    fn decode(
+        value: PgValueRef<'_>,
+    ) -> Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
+        let s: sqlx::types::Json<Category> =  sqlx::Decode::<'_, Postgres>::decode(value)?;
+        Ok(s.0)
+    }
 }
 
 impl Category {

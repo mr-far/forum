@@ -1,11 +1,13 @@
-use serde_json::{from_value, Value};
 use {
-    sqlx::PgExecutor,
+    sqlx::{
+        Decode, Postgres, PgExecutor,
+        postgres::PgValueRef
+    },
     bitflags::bitflags,
     chrono::{DateTime, Utc},
     serde::{Serialize, Deserialize},
     crate::{
-        bitflags_serde_impl,
+        bitflags_convector,
         models::user::User,
         utils::snowflake::Snowflake,
         routes::{HttpError, Result as HttpResult}
@@ -24,13 +26,6 @@ pub struct MessageRecord {
     pub updated_at: Option<DateTime<Utc>>
 }
 
-// TODO: Add super cool structure-value deserializer
-#[derive(Debug, Clone)]
-pub struct BigMessageRecord {
-    pub message: Value,
-    pub user: Value
-}
-
 bitflags! {
     #[derive(Debug, Clone, Copy)]
     pub struct MessageFlags: i32 {
@@ -41,7 +36,7 @@ bitflags! {
     }
 }
 
-bitflags_serde_impl!(MessageFlags, i32);
+bitflags_convector!(MessageFlags, i32);
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Message {
@@ -59,6 +54,15 @@ pub struct Message {
     pub referenced_message_id: Option<i64>,
     /// When this message was last edited
     pub updated_at: Option<DateTime<Utc>>
+}
+
+impl Decode<'_, Postgres> for Message {
+    fn decode(
+        value: PgValueRef<'_>,
+    ) -> Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
+        let s: sqlx::types::Json<Message> =  sqlx::Decode::<'_, Postgres>::decode(value)?;
+        Ok(s.0)
+    }
 }
 
 impl Message {
@@ -80,19 +84,6 @@ impl Message {
     /// Checks whether message has required [`MessageFlags`]
     pub fn is(self, flag: MessageFlags) -> bool {
         self.flags.contains(flag)
-    }
-
-    /// Create a list of messages from the given rows.
-    pub fn from_rows(rows: &[BigMessageRecord]) -> Vec<Self> {
-        if rows.is_empty() {
-            return Vec::new();
-        }
-
-        rows
-            .iter()
-            // TODO: Fix message creation
-            .map(|row| Message::from(from_value(row.message.clone()).unwrap(), from_value(row.user.clone()).unwrap()))
-            .collect()
     }
 }
 
