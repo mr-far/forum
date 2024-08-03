@@ -54,7 +54,6 @@ async fn register(
     let id = app.snowflake.lock().unwrap().build();
 
     let user = app.database.create_user(id, payload.username.as_str(), payload.display_name.as_str()).await
-        .map(|row| User::from(row))
         .map_err(|err| HttpError::Database(err))?;
     let secret = app.database.create_secret(id, payload.password.as_str()).await
         .map(|row| Secret::from(row))

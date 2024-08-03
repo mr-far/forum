@@ -115,7 +115,7 @@ async fn get_messages(
     app.database.fetch_user_by_token(token).await?;
 
     let messages = app.database.fetch_messages(path.into_inner().into(), query.limit, query.before, query.after).await
-        .map_err(|_| HttpError::UnknownThread)?;
+        .map_err(HttpError::Database)?;
 
     Ok(HttpResponse::Ok().json(messages))
 }
@@ -185,7 +185,6 @@ async fn create_message(
         .map(|row| Message::from(row, user.clone()))?;
 
     _ = app.dispatch(DispatchTarget::Global, MessageCreate(message.clone()));
-    _ = app.dispatch(DispatchTarget::User(user.id), MessageCreate(message.clone()));
 
     Ok(HttpResponse::Ok().json(message))
 }
@@ -216,7 +215,7 @@ async fn modify_message(
         return Err(HttpError::MissingAccess);
     }
 
-    let message = app.database.update_message(path.into_inner().1.into(), payload.into_inner()).await
+    let message = app.database.update_message(path.into_inner().1.into(), &payload.content).await
         .map(|row| Message::from(row, user))?;
 
     _ = app.dispatch(DispatchTarget::Global, MessageUpdate(message.clone()));
