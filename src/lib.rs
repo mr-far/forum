@@ -7,7 +7,7 @@ use {
     crate::{
         models::{
             gateway::GatewayEvent,
-            database::DatabaseManager
+            database::Database
         },
         utils::snowflake::{SnowflakeBuilder, Snowflake},
         gateway::connection::GatewayConnection
@@ -29,7 +29,7 @@ pub struct App {
     pub snowflake: Mutex<SnowflakeBuilder>,
     pub channel: broadcast::Sender<(DispatchTarget, GatewayEvent)>,
     pub online: HashMap<Snowflake, GatewayConnection>,
-    pub database: DatabaseManager,
+    pub database: Database,
     pub pool: PgPool,
 }
 

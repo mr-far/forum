@@ -9,7 +9,7 @@ use {
         routes,
         App as AppData,
         utils::snowflake::{EPOCH, SnowflakeBuilder},
-        models::database::DatabaseManager
+        models::database::Database
     },
 };
 
@@ -32,7 +32,7 @@ async fn main() -> std::io::Result<()> {
         }.into(),
         channel,
         online: HashMap::new(),
-        database: DatabaseManager::new(pool.clone()),
+        database: Database::new(pool.clone()),
         pool: pool.clone()
     });
 
