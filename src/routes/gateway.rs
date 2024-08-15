@@ -30,7 +30,6 @@ async fn gateway(
             stream,
             session,
             session_id: new_session_id(),
-            thread: None,
             user: None,
         };
         connection.run().await

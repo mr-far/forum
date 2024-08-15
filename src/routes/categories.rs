@@ -45,10 +45,7 @@ async fn get_category(
     let category = app.database.fetch_category(category_id.into_inner().into()).await
         .ok_or(HttpError::UnknownCategory)?;
 
-    let user = app.database.fetch_user(category.owner_id.into()).await
-        .ok_or(HttpError::UnknownUser)?;
-
-    Ok(HttpResponse::Ok().json(Category::from(category, user)))
+    Ok(HttpResponse::Ok().json(category))
 }
 
 /// Create a new category and return [`Category`] - `POST /categories`

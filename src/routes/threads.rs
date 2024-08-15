@@ -13,8 +13,7 @@ use {
             user::Permissions,
             requests::{CreateMessagePayload, ModifyMessagePayload},
             message::{Message, MessageRecord, MessageFlags},
-            gateway::GatewayEvent::{MessageCreate, MessageDelete, MessageUpdate, ThreadDelete},
-            thread::Thread
+            gateway::GatewayEvent::{MessageCreate, MessageDelete, MessageUpdate, ThreadDelete}
         },
         utils::{
             authorization::extract_header,
@@ -32,7 +31,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
                 web::scope("{thread_id}/messages")
                     .route("", web::post().to(create_message))
                     .route("", web::get().to(get_messages))
-                    .route("{message_id}", web::patch().to(get_message))
+                    .route("{message_id}", web::get().to(get_message))
                     .route("{message_id}", web::patch().to(modify_message))
                     .route("{message_id}", web::delete().to(delete_message))
             )
@@ -43,22 +42,17 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 ///
 /// ### Errors
 ///
-/// * [`HttpError::UnknownCategory`] - If the category is not found
+/// * [`HttpError::UnknownThread`] - If the thread is not found
 /// * [`HttpError::UnknownUser`] - If the owner of the thread is not found
 /// * [`HttpError::UnknownMessage`] - If the original message of the thread is not found
 async fn get_thread(
-    category_id: web::Path<i64>,
+    thread_id: web::Path<i64>,
     app: web::Data<App>,
 ) -> Result<HttpResponse> {
-    let thread = app.database.fetch_thread(category_id.into_inner().into())
-        .await.ok_or(HttpError::UnknownCategory)?;
-    let user = app.database.fetch_user(thread.author_id.into())
-        .await.ok_or(HttpError::UnknownUser)?;
-    let message = app.database.fetch_message(thread.id.into(), thread.original_message_id.into())
-        .await.ok_or(HttpError::UnknownMessage)
-        .map(|row| Message::from(row, user.clone()))?;
+    let thread = app.database.fetch_thread(thread_id.to_owned().into())
+        .await?;
 
-    Ok(HttpResponse::Ok().json(Thread::from(thread, user, message)))
+    Ok(HttpResponse::Ok().json(thread))
 }
 
 /// Delete a thread - `DELETE /threads/{thread_id}`
@@ -74,9 +68,9 @@ async fn delete_thread(
     let token = extract_header(&request, AUTHORIZATION)?;
     let user = app.database.fetch_user_by_token(token).await?;
     let thread = app.database.fetch_thread(thread_id.to_owned().into())
-        .await.ok_or(HttpError::UnknownThread)?;
+        .await?;
 
-    if user.id.0 != thread.author_id && !user.has_permission(Permissions::MANAGE_THREADS) {
+    if user.id != thread.author.id && !user.has_permission(Permissions::MANAGE_THREADS) {
         return Err(HttpError::MissingAccess);
     }
 
@@ -114,7 +108,7 @@ async fn get_messages(
     let token = extract_header(&request, AUTHORIZATION)?;
     app.database.fetch_user_by_token(token).await?;
 
-    let messages = app.database.fetch_messages(path.into_inner().into(), query.limit, query.before, query.after).await
+    let messages = app.database.fetch_messages(path.to_owned().into(), query.limit, query.before, query.after).await
         .map_err(HttpError::Database)?;
 
     Ok(HttpResponse::Ok().json(messages))
@@ -136,11 +130,12 @@ async fn get_message(
     app: web::Data<App>
 ) -> Result<HttpResponse> {
     let token = extract_header(&request, AUTHORIZATION)?;
-    let user = app.database.fetch_user_by_token(token).await?;
+    app.database.fetch_user_by_token(token).await?;
+
     let message = app.database.fetch_message(path.to_owned().0.into(), path.to_owned().1.into())
         .await.ok_or(HttpError::UnknownMessage)?;
 
-    Ok(HttpResponse::Ok().json(Message::from(message, user)))
+    Ok(HttpResponse::Ok().json(message))
 }
 
 /// Create a new message and return [`Message`] - `POST /threads/{thread_id}/messages`
@@ -211,11 +206,11 @@ async fn modify_message(
     let message = app.database.fetch_message(path.to_owned().0.into(), path.to_owned().1.into())
         .await.ok_or(HttpError::UnknownMessage)?;
 
-    if user.id.0 != message.author_id {
+    if user.id != message.author.id {
         return Err(HttpError::MissingAccess);
     }
 
-    let message = app.database.update_message(path.into_inner().1.into(), &payload.content).await
+    let message = app.database.update_message(path.to_owned().1.into(), &payload.content).await
         .map(|row| Message::from(row, user))?;
 
     _ = app.dispatch(DispatchTarget::Global, MessageUpdate(message.clone()));
@@ -245,11 +240,11 @@ async fn delete_message(
     let message = app.database.fetch_message(path.to_owned().0.into(), path.to_owned().1.into())
         .await.ok_or(HttpError::UnknownMessage)?;
 
-    if user.id.0 != message.author_id && !user.has_permission(Permissions::MANAGE_MESSAGES) {
+    if user.id != message.author.id && !user.has_permission(Permissions::MANAGE_MESSAGES) {
         return Err(HttpError::MissingAccess);
     }
 
-    if message.is(MessageFlags::UNDELETEABLE) {
+    if message.clone().is(MessageFlags::UNDELETEABLE) {
         return Err(HttpError::Undeletable)
     }
 
