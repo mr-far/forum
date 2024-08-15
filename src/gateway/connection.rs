@@ -3,14 +3,15 @@ use {
     futures::StreamExt,
     secrecy::ExposeSecret,
     std::sync::Arc,
-    tokio::{select, time::{sleep, Duration}},
-    tokio::sync::broadcast::error::RecvError,
+    tokio::{
+        select, time::{sleep, Duration},
+        sync::broadcast::error::RecvError
+    },
     crate::{
         App,
         DispatchTarget,
         models::{
             user::User,
-            thread::Thread,
             gateway::{
                 GatewayEvent, GatewayHelloPacket, Ready,
                 IncomingGatewayPacket, OutgoingGatewayPacket,
@@ -29,8 +30,6 @@ pub struct GatewayConnection {
     pub stream: actix_ws::MessageStream,
     /// The gateway session ID.
     pub session_id: String,
-    /// The currently subscribed thread.
-    pub thread: Option<Thread>,
     /// The currently authenticated user.
     pub user: Option<User>,
 }
