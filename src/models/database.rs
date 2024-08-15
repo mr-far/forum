@@ -4,9 +4,9 @@ use {
     sqlx::PgPool,
     crate::{
         models::{
-            category::CategoryRecord,
+            category::Category,
             message::MessageRecord,
-            thread::ThreadRecord,
+            thread::Thread,
             secret::{
                 Secret, SecretRecord, generate_user_secrets,
                 serialize_secret_timestamp, serialize_user_secret, serialize_user_token
@@ -109,8 +109,12 @@ impl Database {
     /// ### Returns
     ///
     /// * [`CategoryRecord`] if found, otherwise `None`.
-    pub async fn fetch_category(&self, category_id: Snowflake) -> Option<CategoryRecord> {
-        sqlx::query_as!(CategoryRecord, r#"SELECT * FROM categories WHERE id = $1"#, category_id.0)
+    pub async fn fetch_category(&self, category_id: Snowflake) -> Option<Category> {
+        sqlx::query_as!(Category, r#"
+                SELECT c.id, c.title, c.description, c.locked, ROW_TO_JSON(u.*) AS "owner!: User"
+                FROM categories c LEFT JOIN users u ON c.owner_id = c.id WHERE c.id = $1"#,
+            category_id.0
+        )
             .fetch_optional(&self.pool)
             .await.ok()?
     }
@@ -124,10 +128,20 @@ impl Database {
     /// ### Returns
     ///
     /// * [`ThreadRecord`] if found, otherwise `None`.
-    pub async fn fetch_thread(&self, thread_id: Snowflake) -> Option<ThreadRecord> {
-        sqlx::query_as!(ThreadRecord, r#"SELECT * FROM threads WHERE id = $1"#, thread_id.0)
-            .fetch_optional(&self.pool)
-            .await.ok()?
+    pub async fn fetch_thread(&self, thread_id: Snowflake) -> Result<Thread, HttpError> {
+        sqlx::query_as!(Thread, r#"
+                SELECT t.id, t.category_id, t.title, t.flags, (
+                    SELECT (m.id, m.content, m.thread_id, m.flags, m.referenced_message_id, m.updated_at, ROW_TO_JSON(omu.*) AS "author!: User")
+                    FROM messages m LEFT JOIN users omu ON m.author_id = omu.id WHERE m.id = t.original_message_id AND thread_id = t.id
+                ) AS "original_message!: Message", ROW_TO_JSON(u.*) AS "author!: User"
+                FROM threads t
+                LEFT JOIN users u ON t.author_id = u.id
+                WHERE t.id = $1"#,
+            thread_id.0
+        )
+            .fetch_one(&self.pool)
+            .await
+            .map_err(HttpError::Database)
     }
 
     /// Fetch a message from the database by ID.
@@ -140,8 +154,12 @@ impl Database {
     /// ### Returns
     ///
     /// * [`MessageRecord`] if found, otherwise `None`.
-    pub async fn fetch_message(&self, thread_id: Snowflake, message_id: Snowflake) -> Option<MessageRecord> {
-        sqlx::query_as!(MessageRecord, r#"SELECT * FROM messages WHERE id = $1 AND thread_id = $2"#, message_id.0, thread_id.0)
+    pub async fn fetch_message(&self, thread_id: Snowflake, message_id: Snowflake) -> Option<Message> {
+        sqlx::query_as!(Message, r#"
+                SELECT m.id, m.content, m.thread_id, m.flags, m.referenced_message_id, m.updated_at, ROW_TO_JSON(u.*) AS "author!: User"
+                FROM messages m LEFT JOIN users u ON m.author_id = u.id WHERE m.id = $1 AND thread_id = $2"#,
+            message_id.0, thread_id.0
+        )
             .fetch_optional(&self.pool)
             .await.ok()?
     }
@@ -166,22 +184,18 @@ impl Database {
         let limit = limit.unwrap_or(50).min(100);
         let rows = if before.is_none() && after.is_none() {
             sqlx::query_as!(Message, r#"
-                   SELECT m.id, m.content, m.thread_id, m.flags, m.referenced_message_id, m.updated_at,
-                   (u.id, u.username, u.display_name, u.bio, u.flags, u.permissions) AS "author!: User"
-                   FROM messages m JOIN users u ON m.author_id = u.id
-                   WHERE thread_id = $1
-                   ORDER BY m.id DESC LIMIT $2"#,
+                   SELECT m.id, m.content, m.thread_id, m.flags, m.referenced_message_id, m.updated_at, ROW_TO_JSON(u.*) AS "author!: User"
+                   FROM messages m LEFT JOIN users u ON m.author_id = u.id
+                   WHERE thread_id = $1 ORDER BY m.id DESC LIMIT $2"#,
                 thread_id.0, i64::from(limit)
             )
                 .fetch_all(&self.pool)
                 .await?
         } else {
             sqlx::query_as!(Message, r#"
-                   SELECT m.id, m.content, m.thread_id, m.flags, m.referenced_message_id, m.updated_at,
-                   (u.id, u.username, u.display_name, u.bio, u.flags, u.permissions) AS "author!: User"
-                   FROM messages m JOIN users u ON m.author_id = u.id
-                   WHERE thread_id = $1 AND m.id > $2 AND m.id < $3
-                   ORDER BY m.id DESC LIMIT $4"#,
+                   SELECT m.id, m.content, m.thread_id, m.flags, m.referenced_message_id, m.updated_at, ROW_TO_JSON(u.*) AS "author!: User"
+                   FROM messages m LEFT JOIN users u ON m.author_id = u.id
+                   WHERE thread_id = $1 AND m.id < $2 AND m.id > $3 ORDER BY m.id DESC LIMIT $4"#,
                 thread_id.0, before.map_or(i64::MAX, Into::into), after.map_or(i64::MIN, Into::into), i64::from(limit)
             )
                 .fetch_all(&self.pool)

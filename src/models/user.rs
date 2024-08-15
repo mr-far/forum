@@ -87,7 +87,6 @@ pub struct User {
     pub flags: UserFlags
 }
 
-
 impl Decode<'_, Postgres> for User {
     fn decode(
         value: PgValueRef<'_>,
@@ -113,6 +112,20 @@ impl User {
         app.database.fetch_secret(self.id)
             .await.ok_or(HttpError::Unauthorized)
     }
+
+    /// Deletes the user.
+    ///
+    /// ### Errors
+    ///
+    /// * [`HttpError::Database`] - If the database query fails.
+    pub async fn delete<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<()> {
+        sqlx::query_as!(UserRecord, r#"DELETE FROM users WHERE id = $1"#,
+            self.id.0
+        )
+            .execute(executor).await
+            .map(|_| ())
+            .map_err(|err| HttpError::Database(err))
+    }
 }
 
 impl UserRecord {
@@ -130,20 +143,6 @@ impl UserRecord {
             self.id, self.username, self.display_name
         )
             .fetch_one(executor).await
-            .map_err(|err| HttpError::Database(err))
-    }
-
-    /// Deletes the user.
-    ///
-    /// ### Errors
-    ///
-    /// * [`HttpError::Database`] - If the database query fails.
-    pub async fn delete<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<()> {
-        sqlx::query_as!(UserRecord, r#"DELETE FROM users WHERE id = $1"#,
-            self.id
-        )
-            .execute(executor).await
-            .map(|_| ())
             .map_err(|err| HttpError::Database(err))
     }
 }

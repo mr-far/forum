@@ -15,7 +15,7 @@ use {
 };
 
 /// Represents a message record stored in the database.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct MessageRecord {
     pub id: i64,
     pub content: String,
@@ -85,6 +85,20 @@ impl Message {
     pub fn is(self, flag: MessageFlags) -> bool {
         self.flags.contains(flag)
     }
+
+    /// Deletes the category.
+    ///
+    /// ## Errors
+    ///
+    /// * [`HttpError::Database`] - If the database query fails.
+    pub async fn delete<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<()> {
+        sqlx::query_as!(ThreadRecord, r#"DELETE FROM messages WHERE id = $1 AND thread_id = $2"#,
+            self.id.0, self.thread_id.0
+        )
+            .execute(executor).await
+            .map(|_| ())
+            .map_err(|err| HttpError::Database(err))
+    }
 }
 
 impl MessageRecord {
@@ -103,23 +117,5 @@ impl MessageRecord {
         )
             .fetch_one(executor).await
             .map_err(|_| HttpError::UnknownMessage)
-    }
-
-    /// Deletes the category.
-    ///
-    /// ## Errors
-    ///
-    /// * [`HttpError::Database`] - If the database query fails.
-    pub async fn delete<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<()> {
-        sqlx::query_as!(ThreadRecord, r#"DELETE FROM messages WHERE id = $1 AND thread_id = $2"#,
-            self.id, self.thread_id
-        )
-            .execute(executor).await
-            .map(|_| ())
-            .map_err(|err| HttpError::Database(err))
-    }
-
-    pub fn is(&self, flag: MessageFlags) -> bool {
-        MessageFlags::from_bits_retain(self.flags).contains(flag)
     }
 }

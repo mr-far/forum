@@ -56,6 +56,20 @@ impl Category {
             owner
         }
     }
+
+    /// Deletes the category.
+    ///
+    /// ### Errors
+    ///
+    /// * [`HttpError::Database`] - If the database query fails.
+    pub async fn delete<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<()> {
+        sqlx::query_as!(ThreadRecord, r#"DELETE FROM categories WHERE id = $1"#,
+            self.id.0
+        )
+            .execute(executor).await
+            .map(|_| ())
+            .map_err(|err| HttpError::Database(err))
+    }
 }
 
 impl CategoryRecord {
@@ -73,20 +87,6 @@ impl CategoryRecord {
             self.id, self.title, self.description, self.owner_id, self.locked
         )
             .fetch_one(executor).await
-            .map_err(|err| HttpError::Database(err))
-    }
-
-    /// Deletes the category.
-    ///
-    /// ### Errors
-    ///
-    /// * [`HttpError::Database`] - If the database query fails.
-    pub async fn delete<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<()> {
-        sqlx::query_as!(ThreadRecord, r#"DELETE FROM categories WHERE id = $1"#,
-            self.id
-        )
-            .execute(executor).await
-            .map(|_| ())
             .map_err(|err| HttpError::Database(err))
     }
 }

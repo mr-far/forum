@@ -84,6 +84,20 @@ impl Thread {
     pub fn is(self, flag: ThreadFlags) -> bool {
         self.flags.contains(flag)
     }
+
+    /// Deletes the thread.
+    ///
+    /// ### Errors
+    ///
+    /// * [`HttpError::Database`] - If the database query fails.
+    pub async fn delete<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<()> {
+        sqlx::query_as!(ThreadRecord, r#"DELETE FROM threads WHERE id = $1"#,
+            self.id.0
+        )
+            .execute(executor).await
+            .map(|_| ())
+            .map_err(|err| HttpError::Database(err))
+    }
 }
 
 impl ThreadRecord {
@@ -102,19 +116,5 @@ impl ThreadRecord {
         )
             .fetch_one(executor).await
             .map_err(|_| HttpError::UnknownCategory) // category_id references category table
-    }
-
-    /// Deletes the thread.
-    ///
-    /// ### Errors
-    ///
-    /// * [`HttpError::Database`] - If the database query fails.
-    pub async fn delete<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<()> {
-        sqlx::query_as!(ThreadRecord, r#"DELETE FROM threads WHERE id = $1"#,
-            self.id
-        )
-            .execute(executor).await
-            .map(|_| ())
-            .map_err(|err| HttpError::Database(err))
     }
 }
