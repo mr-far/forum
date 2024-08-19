@@ -96,7 +96,7 @@ impl Thread {
         )
             .execute(executor).await
             .map(|_| ())
-            .map_err(|err| HttpError::Database(err))
+            .map_err(HttpError::Database)
     }
 }
 

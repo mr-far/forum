@@ -1,6 +1,9 @@
 use {
-    serde::Serialize,
-    sqlx::PgExecutor,
+    serde::{Serialize, Deserialize},
+    sqlx::{
+        Decode, Postgres, PgExecutor,
+        postgres::PgValueRef
+    },
     base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD},
     secrecy::SecretString,
     std::time::{SystemTime, UNIX_EPOCH},
@@ -10,24 +13,14 @@ use {
         utils::{
             convectors::to_string_radix_signed,
             snowflake::Snowflake,
-
         }
     }
-
 };
 
-pub struct SecretRecord {
-    pub id: i64,
-    pub password_hash: String,
-    pub secret1: i64,
-    pub secret2: i64,
-    pub secret3: i64,
-}
-
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Secret {
     pub id: Snowflake,
-    pub hash: String,
+    pub password_hash: String,
     pub secret1: i64,
     pub secret2: i64,
     pub secret3: i64
@@ -52,24 +45,20 @@ impl Secret {
     /// Resets secrets and return new object if no conflict, otherwise return
     pub async fn reset<'a, E: PgExecutor<'a>>(self, executor: E) -> Result<Secret, HttpError> {
         let secrets = generate_user_secrets();
-        sqlx::query_as!(SecretRecord, r#"UPDATE secrets SET secret1 = $1, secret2 = $2, secret3 = $3 WHERE id = $4 RETURNING *"#,
+        sqlx::query_as!(Secret, r#"UPDATE secrets SET secret1 = $1, secret2 = $2, secret3 = $3 WHERE id = $4 RETURNING *"#,
             secrets.0, secrets.1, secrets.2, self.id.0
         )
             .fetch_one(executor).await
-            .map(|x| Secret::from(x))
-            .map_err(|err| HttpError::Database(err))
+            .map_err(HttpError::Database)
     }
 }
 
-impl From<SecretRecord> for Secret {
-    fn from(x: SecretRecord) -> Self {
-        Self {
-            id: Snowflake(x.id),
-            hash: x.password_hash,
-            secret1: x.secret1,
-            secret2: x.secret2,
-            secret3: x.secret3
-        }
+impl Decode<'_, Postgres> for Secret {
+    fn decode(
+        value: PgValueRef<'_>,
+    ) -> Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
+        let s: sqlx::types::Json<Secret> =  sqlx::Decode::<'_, Postgres>::decode(value)?;
+        Ok(s.0)
     }
 }
 

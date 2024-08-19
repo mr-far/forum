@@ -6,23 +6,11 @@ use {
         postgres::PgValueRef
     },
     crate::{
-        App,
         bitflags_convector,
-        models::secret::Secret,
         utils::snowflake::Snowflake,
         routes::{HttpError, Result as HttpResult}
     }
 };
-
-/// Represents a user record stored in the database.
-pub struct UserRecord {
-    pub id: i64,
-    pub username: String,
-    pub display_name: Option<String>,
-    pub bio: Option<String>,
-    pub permissions: i64,
-    pub flags: i32
-}
 
 bitflags! {
     #[derive(Debug, Clone, Copy)]
@@ -87,15 +75,6 @@ pub struct User {
     pub flags: UserFlags
 }
 
-impl Decode<'_, Postgres> for User {
-    fn decode(
-        value: PgValueRef<'_>,
-    ) -> Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
-        let s: sqlx::types::Json<User> =  sqlx::Decode::<'_, Postgres>::decode(value)?;
-        Ok(s.0)
-    }
-}
-
 impl User {
     /// Checks whether user has required [`ThreadFlags`]
     pub fn has_flag(&self, flag: UserFlags) -> bool {
@@ -107,42 +86,26 @@ impl User {
         self.permissions.contains(permission)
     }
 
-    /// Returns user secret
-    pub async fn secret(&self, app: &App) -> Result<Secret, HttpError> {
-        app.database.fetch_secret(self.id)
-            .await.ok_or(HttpError::Unauthorized)
-    }
-
     /// Deletes the user.
     ///
     /// ### Errors
     ///
     /// * [`HttpError::Database`] - If the database query fails.
     pub async fn delete<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<()> {
-        sqlx::query_as!(UserRecord, r#"DELETE FROM users WHERE id = $1"#,
+        sqlx::query!(r#"DELETE FROM users WHERE id = $1"#,
             self.id.0
         )
             .execute(executor).await
             .map(|_| ())
-            .map_err(|err| HttpError::Database(err))
+            .map_err(HttpError::Database)
     }
 }
 
-impl UserRecord {
-    /// Saves a new user in the database.
-    ///
-    /// ### Returns
-    ///
-    /// * [`UserRecord`] on success, otherwise [`HttpError`].
-    ///
-    /// ### Errors
-    ///
-    /// * [`HttpError::Database`] - If the database query fails.
-    pub async fn save<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<Self> {
-        sqlx::query_as!(UserRecord, r#"INSERT INTO users(id, username, display_name) VALUES ($1, $2, $3) RETURNING *"#,
-            self.id, self.username, self.display_name
-        )
-            .fetch_one(executor).await
-            .map_err(|err| HttpError::Database(err))
+impl Decode<'_, Postgres> for User {
+    fn decode(
+        value: PgValueRef<'_>,
+    ) -> Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
+        let s: sqlx::types::Json<User> =  sqlx::Decode::<'_, Postgres>::decode(value)?;
+        Ok(s.0)
     }
 }

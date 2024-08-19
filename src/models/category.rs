@@ -68,7 +68,7 @@ impl Category {
         )
             .execute(executor).await
             .map(|_| ())
-            .map_err(|err| HttpError::Database(err))
+            .map_err(HttpError::Database)
     }
 }
 
@@ -87,6 +87,6 @@ impl CategoryRecord {
             self.id, self.title, self.description, self.owner_id, self.locked
         )
             .fetch_one(executor).await
-            .map_err(|err| HttpError::Database(err))
+            .map_err(HttpError::Database)
     }
 }
