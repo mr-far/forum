@@ -9,7 +9,6 @@ use {
         routes::{HttpError, Result},
         models::{
             requests::RegisterPayload,
-            secret::Secret,
             user::User
         }
     }
@@ -42,22 +41,21 @@ async fn register(
         .validate()
         .map_err(|err| HttpError::Validation(err))?;
 
-    if app.database.fetch_user_by_username(payload.username.as_str()).await.is_some() {
+    if app.database.fetch_user_by_username(&payload.username).await.is_some() {
         return Err(HttpError::TakenUsername)
     }
 
     let strong_password = Regex::new(r"^[a-zA-Z0-9!@#$&()\\-`.+,/]*${12,}").unwrap();
-    if !strong_password.is_match(payload.password.as_str()) {
+    if !strong_password.is_match(&payload.password) {
         return Err(HttpError::WeekPassword)
     }
 
     let id = app.snowflake.lock().unwrap().build();
 
-    let user = app.database.create_user(id, payload.username.as_str(), payload.display_name.as_str()).await
-        .map_err(|err| HttpError::Database(err))?;
-    let secret = app.database.create_secret(id, payload.password.as_str()).await
-        .map(|row| Secret::from(row))
-        .map_err(|err| HttpError::Database(err))?;
+    let user = app.database.create_user(id, &payload.username, &payload.display_name).await
+        .map_err(HttpError::Database)?;
+    let secret = app.database.create_secret(id, &payload.password).await
+        .map_err(HttpError::Database)?;
 
     let token = secret.token().expose_secret().to_owned();
 

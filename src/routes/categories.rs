@@ -8,7 +8,7 @@ use {
         App,
         routes::{Result, HttpError},
         models::{
-            category::{Category, CategoryRecord},
+            category::Category,
             user::Permissions,
             requests::{CreateCategoryPayload, CreateThreadPayload},
             message::{Message, MessageFlags, MessageRecord},
@@ -72,14 +72,9 @@ async fn create_category(
         .map_err(|err| HttpError::Validation(err))?;
 
     let id = app.snowflake.lock().unwrap().build();
-    CategoryRecord {
-        id: id.0,
-        title: payload.title.clone(),
-        description: payload.description.clone(),
-        owner_id: user.id.0,
-        locked: payload.is_locked
-    }.save(&app.pool).await
+    app.database.create_category(id, user.id, &payload).await
         .map(|row| HttpResponse::Ok().json(Category::from(row, user)))
+        .map_err(HttpError::Database)
 }
 
 /// Create a new thread and return [`Thread`] - `POST /categories/threads`
