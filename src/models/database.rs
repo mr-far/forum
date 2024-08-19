@@ -4,11 +4,12 @@ use {
     sqlx::PgPool,
     crate::{
         models::{
-            category::Category,
+            category::{Category, CategoryRecord},
+            requests::CreateCategoryPayload,
             message::MessageRecord,
             thread::Thread,
             secret::{
-                Secret, SecretRecord, generate_user_secrets,
+                Secret, generate_user_secrets,
                 serialize_secret_timestamp, serialize_user_secret, serialize_user_token
             },
             user::User,
@@ -112,7 +113,7 @@ impl Database {
     pub async fn fetch_category(&self, category_id: Snowflake) -> Option<Category> {
         sqlx::query_as!(Category, r#"
                 SELECT c.id, c.title, c.description, c.locked, ROW_TO_JSON(u.*) AS "owner!: User"
-                FROM categories c LEFT JOIN users u ON c.owner_id = c.id WHERE c.id = $1"#,
+                FROM categories c LEFT JOIN users u ON c.owner_id = u.id WHERE c.id = $1"#,
             category_id.0
         )
             .fetch_optional(&self.pool)
@@ -131,17 +132,17 @@ impl Database {
     pub async fn fetch_thread(&self, thread_id: Snowflake) -> Result<Thread, HttpError> {
         sqlx::query_as!(Thread, r#"
                 SELECT t.id, t.category_id, t.title, t.flags, (
-                    SELECT (m.id, m.content, m.thread_id, m.flags, m.referenced_message_id, m.updated_at, ROW_TO_JSON(omu.*) AS "author!: User")
-                    FROM messages m LEFT JOIN users omu ON m.author_id = omu.id WHERE m.id = t.original_message_id AND thread_id = t.id
+                  SELECT (m.id, m.content, m.thread_id, m.flags, m.referenced_message_id, m.updated_at, ROW_TO_JSON(omu.*))
+                  FROM messages m LEFT JOIN users omu ON m.author_id = omu.id WHERE m.id = t.original_message_id AND thread_id = t.id
                 ) AS "original_message!: Message", ROW_TO_JSON(u.*) AS "author!: User"
                 FROM threads t
                 LEFT JOIN users u ON t.author_id = u.id
                 WHERE t.id = $1"#,
             thread_id.0
         )
-            .fetch_one(&self.pool)
-            .await
+            .fetch_one(&self.pool).await
             .map_err(HttpError::Database)
+
     }
 
     /// Fetch a message from the database by ID.
@@ -215,10 +216,9 @@ impl Database {
     ///
     /// * [`Secret`] if found, otherwise `None`.
     pub async fn fetch_secret(&self, user_id: Snowflake) -> Option<Secret> {
-        sqlx::query_as!(SecretRecord, r#"SELECT * FROM secrets WHERE id = $1"#, user_id.0)
+        sqlx::query_as!(Secret, r#"SELECT * FROM secrets WHERE id = $1"#, user_id.0)
             .fetch_optional(&self.pool)
             .await.ok()?
-            .map(|x| Secret::from(x))
     }
 
     /// Create a new user secret in the database.
@@ -226,9 +226,9 @@ impl Database {
     /// ### Errors
     ///
     /// * [`sqlx::Error`] - If the database query fails.
-    pub async fn create_secret(&self, id: Snowflake, password: &str) -> Result<SecretRecord, sqlx::Error> {
+    pub async fn create_secret(&self, id: Snowflake, password: &str) -> Result<Secret, sqlx::Error> {
         let secrets = generate_user_secrets();
-        sqlx::query_as!(SecretRecord, r#"INSERT INTO secrets(id, password_hash, secret1, secret2, secret3) VALUES ($1, $2, $3, $4, $5) RETURNING *"#,
+        sqlx::query_as!(Secret, r#"INSERT INTO secrets(id, password_hash, secret1, secret2, secret3) VALUES ($1, $2, $3, $4, $5) RETURNING *"#,
             id.0, digest(password), secrets.0, secrets.1, secrets.2
         )
             .fetch_one(&self.pool).await
@@ -242,6 +242,18 @@ impl Database {
     pub async fn create_user(&self, id: Snowflake, username: &str, display_name: &str) -> Result<User, sqlx::Error> {
         sqlx::query_as!(User, r#"INSERT INTO users(id, username, display_name) VALUES ($1, $2, $3) RETURNING *"#,
             id.0, username, display_name
+        )
+            .fetch_one(&self.pool).await
+    }
+
+    /// Create a new category in the database.
+    ///
+    /// ### Errors
+    ///
+    /// * [`sqlx::Error`] - If the database query fails.
+    pub async fn create_category(&self, id: Snowflake, owner_id: Snowflake, payload: &CreateCategoryPayload) -> Result<CategoryRecord, sqlx::Error> {
+        sqlx::query_as!(CategoryRecord, r#"INSERT INTO categories(id, title, description, owner_id, locked) VALUES ($1, $2, $3, $4, $5) RETURNING *"#,
+            id.0, payload.title, payload.description, owner_id.0, payload.is_locked
         )
             .fetch_one(&self.pool).await
     }
