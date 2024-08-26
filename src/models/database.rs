@@ -1,20 +1,21 @@
 use {
     base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD},
-    sha256::digest,
     sqlx::PgPool,
     crate::{
         models::{
             category::Category,
             thread::Thread,
-            secret::{
-                Secret, generate_user_secrets,
-                serialize_secret_timestamp, serialize_user_secret, serialize_user_token
+            session::{
+                Session, serialize_secret_timestamp, serialize_user_secret, serialize_user_token
             },
             user::User,
             message::Message
         },
         routes::{HttpError, Result as HttpResult},
-        utils::snowflake::Snowflake
+        utils::{
+            snowflake::Snowflake,
+            convectors::hex_to_int
+        }
     },
 };
 
@@ -68,35 +69,35 @@ impl Database {
     ///
     /// ### Returns
     ///
-    /// * [`User`] if found, otherwise [`HttpError::Unauthorized`].
-    pub async fn fetch_user_by_token(&self, token: &str) -> HttpResult<User> {
+    /// * [`Session`] if found, otherwise [`HttpError::Unauthorized`].
+    pub async fn fetch_credentials_by_token(&self, token: &str) -> HttpResult<(Session, User)> {
         let parts = token.splitn(2, '.').collect::<Vec<_>>();
 
         if parts.len() != 2 {
             return Err(HttpError::Unauthorized);
         }
 
-        let user_id = BASE64_URL_SAFE_NO_PAD
+        let session_id = BASE64_URL_SAFE_NO_PAD
             .decode(parts[0])
             .map_err(|_| HttpError::Unauthorized)
             .and_then(|v| String::from_utf8(v).map_err(|_| HttpError::Unauthorized))
-            .and_then(|s| s.parse::<i64>().map_err(|_| HttpError::Unauthorized))?;
+            .and_then(|s| s.parse::<i64>().map(|x| format!("{:x}", x)).map_err(|_| HttpError::Unauthorized))?;
 
-        let user = self.fetch_user(user_id.into())
-            .await.ok_or(HttpError::Unauthorized)?;
-        let secret = self.fetch_secret(user.id).await
+        let session = self.fetch_session(session_id.clone()).await
             .ok_or(HttpError::Unauthorized)?;
+        let user = self.fetch_user(session.user_id)
+            .await.ok_or(HttpError::Unauthorized)?;
 
+        let id = hex_to_int(session_id.as_str());
         if serialize_user_token(
-            user.id.into(),
-            serialize_secret_timestamp(user.id.into(), secret.secret3),
-            serialize_user_secret(secret.secret1, secret.secret2, user.id.into()),
+            id, serialize_secret_timestamp(id, session.secret3),
+            serialize_user_secret(session.secret1, session.secret2, id),
         ) != token
         {
             return Err(HttpError::Unauthorized);
         }
 
-        Ok(user)
+        Ok((session, user))
     }
 
     /// Fetch a category from the database by ID.
@@ -213,23 +214,10 @@ impl Database {
     /// ### Returns
     ///
     /// * [`Secret`] if found, otherwise `None`.
-    pub async fn fetch_secret(&self, user_id: Snowflake) -> Option<Secret> {
-        sqlx::query_as!(Secret, r#"SELECT * FROM secrets WHERE id = $1"#, user_id.0)
+    pub async fn fetch_session(&self, id: String) -> Option<Session> {
+        sqlx::query_as!(Session, r#"SELECT * FROM sessions WHERE id = $1"#, id)
             .fetch_optional(&self.pool)
             .await.ok()?
     }
 
-    /// Create a new user secret in the database.
-    ///
-    /// ### Errors
-    ///
-    /// * [`sqlx::Error`] - If the database query fails.
-    pub async fn create_secret(&self, id: Snowflake, password: &str) -> HttpResult<Secret> {
-        let secrets = generate_user_secrets();
-        sqlx::query_as!(Secret, r#"INSERT INTO secrets(id, password_hash, secret1, secret2, secret3) VALUES ($1, $2, $3, $4, $5) RETURNING *"#,
-            id.0, digest(password), secrets.0, secrets.1, secrets.2
-        )
-            .fetch_one(&self.pool).await
-            .map_err(HttpError::Database)
-    }
 }
