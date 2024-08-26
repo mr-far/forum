@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS users (
 	username VARCHAR(32) UNIQUE NOT NULL,
 	display_name VARCHAR(32),
 	bio VARCHAR(2048),
+	password_hash varchar NOT NULL,
 	permissions BIGINT NOT NULL DEFAULT 43,
 	flags INTEGER NOT NULL DEFAULT 0
 );

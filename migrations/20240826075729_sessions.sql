@@ -1,0 +1,10 @@
+-- Add sessions
+
+CREATE TABLE IF NOT EXISTS sessions (
+	id VARCHAR(14) NOT NULL UNIQUE,
+	user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+	secret1 BIGINT NOT NULL,
+	secret2 BIGINT NOT NULL,
+	secret3 BIGINT NOT NULL
+);
