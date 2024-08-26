@@ -14,18 +14,6 @@ use {
     }
 };
 
-/// Represents a message record stored in the database.
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct MessageRecord {
-    pub id: i64,
-    pub content: String,
-    pub author_id: i64,
-    pub thread_id: i64,
-    pub referenced_message_id: Option<i64>,
-    pub flags: i32,
-    pub updated_at: Option<DateTime<Utc>>
-}
-
 bitflags! {
     #[derive(Debug, Clone, Copy)]
     pub struct MessageFlags: i32 {
@@ -56,28 +44,17 @@ pub struct Message {
     pub updated_at: Option<DateTime<Utc>>
 }
 
-impl Decode<'_, Postgres> for Message {
-    fn decode(
-        value: PgValueRef<'_>,
-    ) -> Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
-        let s: sqlx::types::Json<Message> =  sqlx::Decode::<'_, Postgres>::decode(value)?;
-        Ok(s.0)
-    }
-}
-
 impl Message {
-    pub fn from(
-        x: MessageRecord,
-        author: User
-    ) -> Self {
+    /// Creates a new [`Message`] object
+    pub fn new(id: Snowflake, author: User, thread_id: Snowflake, content: &str, flags: Option<MessageFlags>) -> Self {
         Self {
-            id: Snowflake(x.id),
+            id,
             author,
-            content: x.content,
-            thread_id: Snowflake(x.thread_id),
-            flags: MessageFlags::from_bits_retain(x.flags),
-            updated_at: x.updated_at,
-            referenced_message_id: x.referenced_message_id
+            thread_id,
+            flags: flags.unwrap_or(MessageFlags::empty()),
+            content: content.to_string(),
+            referenced_message_id: None,
+            updated_at: None
         }
     }
 
@@ -86,36 +63,63 @@ impl Message {
         self.flags.contains(flag)
     }
 
+    /// Saves a new message in the database.
+    ///
+    /// ## Returns
+    ///
+    /// * [`Message`] on success, otherwise [`HttpError`].
+    ///
+    /// ## Errors
+    ///
+    /// * [`HttpError::UnknownMessage`] - If the referenced message is not found.
+    pub async fn save<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<Self> {
+        sqlx::query!(r#"INSERT INTO messages(id, author_id, content, thread_id, referenced_message_id, flags) VALUES ($1, $2, $3, $4, $5, $6)"#,
+            self.id.0, self.author.id.0, self.content, self.thread_id.0, self.referenced_message_id, self.flags.bits()
+        )
+            .execute(executor).await
+            .map(|_| self)
+            .map_err(|_| HttpError::UnknownMessage)
+    }
+
+    /// Edits an old message in the database.
+    ///
+    /// ## Returns
+    ///
+    /// * [`Message`] on success, otherwise [`HttpError`].
+    ///
+    /// ## Errors
+    ///
+    /// * [`HttpError::UnknownMessage`] - If the message is not found.
+    pub async fn edit<'a, E: PgExecutor<'a>>(self, executor: E, content: &str) -> HttpResult<Self> {
+        sqlx::query!(r#"UPDATE messages SET content = $1 WHERE id = $2"#,
+            content, self.id.0
+        )
+            .execute(executor).await
+            .map(|_| self)
+            .map_err(|_| HttpError::UnknownMessage)
+    }
+
     /// Deletes the category.
     ///
     /// ## Errors
     ///
     /// * [`HttpError::Database`] - If the database query fails.
     pub async fn delete<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<()> {
-        sqlx::query_as!(ThreadRecord, r#"DELETE FROM messages WHERE id = $1 AND thread_id = $2"#,
+        sqlx::query!(r#"DELETE FROM messages WHERE id = $1 AND thread_id = $2"#,
             self.id.0, self.thread_id.0
         )
             .execute(executor).await
             .map(|_| ())
             .map_err(HttpError::Database)
     }
+
 }
 
-impl MessageRecord {
-    /// Saves a new message in the database.
-    ///
-    /// ## Returns
-    ///
-    /// * [`MessageRecord`] on success, otherwise [`HttpError`].
-    ///
-    /// ## Errors
-    ///
-    /// * [`HttpError::UnknownMessage`] - If the referenced message is not found.
-    pub async fn save<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<Self> {
-        sqlx::query_as!(MessageRecord, r#"INSERT INTO messages(id, author_id, content, thread_id, referenced_message_id, flags) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"#,
-            self.id, self.author_id, self.content, self.thread_id, self.referenced_message_id, self.flags
-        )
-            .fetch_one(executor).await
-            .map_err(|_| HttpError::UnknownMessage)
+impl Decode<'_, Postgres> for Message {
+    fn decode(
+        value: PgValueRef<'_>,
+    ) -> Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
+        let s: sqlx::types::Json<Message> =  sqlx::Decode::<'_, Postgres>::decode(value)?;
+        Ok(s.0)
     }
 }

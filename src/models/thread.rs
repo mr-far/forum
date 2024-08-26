@@ -15,16 +15,6 @@ use {
     }
 };
 
-/// Represents a thread record stored in the database.
-pub struct ThreadRecord {
-    pub id: i64,
-    pub title: String,
-    pub author_id: i64,
-    pub flags: i32,
-    pub category_id: i64,
-    pub original_message_id: i64
-}
-
 bitflags! {
     #[derive(Debug, Clone, Copy)]
     pub struct ThreadFlags: i32 {
@@ -55,34 +45,40 @@ pub struct Thread {
     pub original_message: Message
 }
 
-impl Decode<'_, Postgres> for Thread {
-    fn decode(
-        value: PgValueRef<'_>,
-    ) -> Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
-        let s: sqlx::types::Json<Thread> =  sqlx::Decode::<'_, Postgres>::decode(value)?;
-        Ok(s.0)
-    }
-}
-
 impl Thread {
-    pub fn from(
-        x: ThreadRecord,
-        author: User,
-        original_message: Message,
-    ) -> Self {
+    /// Creates a new [`Thread`] object
+    pub fn new(id: Snowflake, category_id: Snowflake, message: Message, title: &str, flags: Option<ThreadFlags>) -> Self {
         Self {
-            id: Snowflake(x.id),
-            title: x.title,
-            flags: ThreadFlags::from_bits_retain(x.flags),
-            category_id: Snowflake(x.category_id),
-            author,
-            original_message
+            id,
+            category_id,
+            title: title.to_string(),
+            author: message.author.clone(),
+            original_message: message,
+            flags: flags.unwrap_or(ThreadFlags::empty())
         }
     }
 
     /// Checks whether thread has required [`ThreadFlags`]
     pub fn is(self, flag: ThreadFlags) -> bool {
         self.flags.contains(flag)
+    }
+
+    /// Saves a new thread in the database.
+    ///
+    /// ### Returns
+    ///
+    /// * [`Thread`] on success, otherwise [`HttpError`].
+    ///
+    /// ### Errors
+    ///
+    /// * [`HttpError::UnknownCategory`] - If the category the thread will be created in is not found.
+    pub async fn save<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<Self> {
+        sqlx::query!(r#"INSERT INTO threads(id, author_id, category_id, original_message_id, title) VALUES ($1, $2, $3, $4, $5)"#,
+            self.id.0, self.author.id.0, self.category_id.0, self.original_message.id.0, self.title
+        )
+            .execute(executor).await
+            .map(|_| self)
+            .map_err(|_| HttpError::UnknownCategory) // category_id references category table
     }
 
     /// Deletes the thread.
@@ -100,21 +96,11 @@ impl Thread {
     }
 }
 
-impl ThreadRecord {
-    /// Saves a new thread in the database.
-    ///
-    /// ### Returns
-    ///
-    /// * [`ThreadRecord`] on success, otherwise [`HttpError`].
-    ///
-    /// ### Errors
-    ///
-    /// * [`HttpError::UnknownCategory`] - If the category the thread will be created in is not found.
-    pub async fn save<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<Self> {
-        sqlx::query_as!(ThreadRecord, r#"INSERT INTO threads(id, author_id, category_id, original_message_id, title) VALUES ($1, $2, $3, $4, $5) RETURNING *"#,
-            self.id, self.author_id, self.category_id, self.original_message_id, self.title
-        )
-            .fetch_one(executor).await
-            .map_err(|_| HttpError::UnknownCategory) // category_id references category table
+impl Decode<'_, Postgres> for Thread {
+    fn decode(
+        value: PgValueRef<'_>,
+    ) -> Result<Self, Box<dyn std::error::Error + 'static + Send + Sync>> {
+        let s: sqlx::types::Json<Thread> =  sqlx::Decode::<'_, Postgres>::decode(value)?;
+        Ok(s.0)
     }
 }

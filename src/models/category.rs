@@ -11,15 +11,6 @@ use {
     }
 };
 
-/// Represents a category record stored in the database.
-pub struct CategoryRecord {
-    pub id: i64,
-    pub title: String,
-    pub description: String,
-    pub owner_id: i64,
-    pub locked: bool
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Category {
     /// The ID of the category
@@ -44,17 +35,32 @@ impl Decode<'_, Postgres> for Category {
 }
 
 impl Category {
-    pub fn from(
-        value: CategoryRecord,
-        owner: User
-    ) -> Self {
+    pub fn new(id: Snowflake, owner: User, title: &str, description: &str, locked: bool) -> Self {
         Self {
-            id: Snowflake(value.id),
-            title: value.title,
-            description: value.description,
-            locked: value.locked,
-            owner
+            id,
+            owner,
+            locked,
+            title: title.to_string(),
+            description: description.to_string(),
         }
+    }
+
+    /// Saves a new category in the database.
+    ///
+    /// ### Returns
+    ///
+    /// * [`Category`] on success, otherwise [`HttpError`].
+    ///
+    /// ### Errors
+    ///
+    /// * [`HttpError::Database`] - If the database query fails.
+    pub async fn save<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<Self> {
+        sqlx::query!(r#"INSERT INTO categories(id, title, description, owner_id, locked) VALUES ($1, $2, $3, $4, $5)"#,
+            self.id.0, self.title, self.description, self.owner.id.0, self.locked
+        )
+            .execute(executor).await
+            .map(|_| self)
+            .map_err(HttpError::Database)
     }
 
     /// Deletes the category.
@@ -68,25 +74,6 @@ impl Category {
         )
             .execute(executor).await
             .map(|_| ())
-            .map_err(HttpError::Database)
-    }
-}
-
-impl CategoryRecord {
-    /// Saves a new category in the database.
-    ///
-    /// ### Returns
-    ///
-    /// * [`CategoryRecord`] on success, otherwise [`HttpError`].
-    ///
-    /// ### Errors
-    ///
-    /// * [`HttpError::Database`] - If the database query fails.
-    pub async fn save<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<Self> {
-        sqlx::query_as!(CategoryRecord, r#"INSERT INTO categories(id, title, description, owner_id, locked) VALUES ($1, $2, $3, $4, $5) RETURNING *"#,
-            self.id, self.title, self.description, self.owner_id, self.locked
-        )
-            .fetch_one(executor).await
             .map_err(HttpError::Database)
     }
 }

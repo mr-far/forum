@@ -11,6 +11,8 @@ use {
         routes::{HttpError, Result as HttpResult}
     }
 };
+use crate::models::message::Message;
+use crate::models::thread::{Thread, ThreadFlags};
 
 bitflags! {
     #[derive(Debug, Clone, Copy)]
@@ -76,6 +78,18 @@ pub struct User {
 }
 
 impl User {
+    /// Creates a new [`User`] object
+    pub fn new(id: Snowflake, username: &str, display_name: &str) -> Self {
+        Self {
+            id,
+            username: username.to_string(),
+            display_name: Some(display_name.to_string()),
+            bio: None,
+            permissions: Permissions::empty(),
+            flags: UserFlags::empty()
+        }
+    }
+
     /// Checks whether user has required [`ThreadFlags`]
     pub fn has_flag(&self, flag: UserFlags) -> bool {
         self.flags.contains(flag)
@@ -84,6 +98,24 @@ impl User {
     /// Checks whether user has required [`Permissions`]
     pub fn has_permission(&self, permission: Permissions) -> bool {
         self.permissions.contains(permission)
+    }
+
+    /// Saves a new user in the database.
+    ///
+    /// ### Returns
+    ///
+    /// * [`User`] on success, otherwise [`HttpError`].
+    ///
+    /// ### Errors
+    ///
+    /// * [`HttpError::Database`] - If the category the thread will be created in is not found.
+    pub async fn save<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<Self> {
+        sqlx::query!(r#"INSERT INTO users(id, username, display_name) VALUES ($1, $2, $3)"#,
+            self.id.0, self.username, self.display_name
+        )
+            .execute(executor).await
+            .map(|_| self)
+            .map_err(HttpError::Database)
     }
 
     /// Deletes the user.

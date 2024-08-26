@@ -4,9 +4,7 @@ use {
     sqlx::PgPool,
     crate::{
         models::{
-            category::{Category, CategoryRecord},
-            requests::CreateCategoryPayload,
-            message::MessageRecord,
+            category::Category,
             thread::Thread,
             secret::{
                 Secret, generate_user_secrets,
@@ -15,7 +13,7 @@ use {
             user::User,
             message::Message
         },
-        routes::HttpError,
+        routes::{HttpError, Result as HttpResult},
         utils::snowflake::Snowflake
     },
 };
@@ -71,7 +69,7 @@ impl Database {
     /// ### Returns
     ///
     /// * [`User`] if found, otherwise [`HttpError::Unauthorized`].
-    pub async fn fetch_user_by_token(&self, token: &str) -> Result<User, HttpError> {
+    pub async fn fetch_user_by_token(&self, token: &str) -> HttpResult<User> {
         let parts = token.splitn(2, '.').collect::<Vec<_>>();
 
         if parts.len() != 2 {
@@ -129,7 +127,7 @@ impl Database {
     /// ### Returns
     ///
     /// * [`ThreadRecord`] if found, otherwise `None`.
-    pub async fn fetch_thread(&self, thread_id: Snowflake) -> Result<Thread, HttpError> {
+    pub async fn fetch_thread(&self, thread_id: Snowflake) -> HttpResult<Thread> {
         sqlx::query_as!(Thread, r#"
                 SELECT t.id, t.category_id, t.title, t.flags, (
                   SELECT (m.id, m.content, m.thread_id, m.flags, m.referenced_message_id, m.updated_at, ROW_TO_JSON(omu.*))
@@ -181,7 +179,7 @@ impl Database {
     /// ### Errors
     ///
     /// * [`sqlx::Error`] - If the database query fails.
-    pub async fn fetch_messages(&self, thread_id: Snowflake, limit: Option<u16>, before: Option<Snowflake>, after: Option<Snowflake>) -> Result<Vec<Message>, sqlx::Error> {
+    pub async fn fetch_messages(&self, thread_id: Snowflake, limit: Option<u16>, before: Option<Snowflake>, after: Option<Snowflake>) -> HttpResult<Vec<Message>> {
         let limit = limit.unwrap_or(50).min(100);
         let rows = if before.is_none() && after.is_none() {
             sqlx::query_as!(Message, r#"
@@ -190,8 +188,8 @@ impl Database {
                    WHERE thread_id = $1 ORDER BY m.id DESC LIMIT $2"#,
                 thread_id.0, i64::from(limit)
             )
-                .fetch_all(&self.pool)
-                .await?
+                .fetch_all(&self.pool).await
+                .map_err(|_| HttpError::UnknownThread)?
         } else {
             sqlx::query_as!(Message, r#"
                    SELECT m.id, m.content, m.thread_id, m.flags, m.referenced_message_id, m.updated_at, ROW_TO_JSON(u.*) AS "author!: User"
@@ -199,8 +197,8 @@ impl Database {
                    WHERE thread_id = $1 AND m.id < $2 AND m.id > $3 ORDER BY m.id DESC LIMIT $4"#,
                 thread_id.0, before.map_or(i64::MAX, Into::into), after.map_or(i64::MIN, Into::into), i64::from(limit)
             )
-                .fetch_all(&self.pool)
-                .await?
+                .fetch_all(&self.pool).await
+                .map_err(|_| HttpError::UnknownThread)?
         };
 
         Ok(rows)
@@ -226,53 +224,12 @@ impl Database {
     /// ### Errors
     ///
     /// * [`sqlx::Error`] - If the database query fails.
-    pub async fn create_secret(&self, id: Snowflake, password: &str) -> Result<Secret, sqlx::Error> {
+    pub async fn create_secret(&self, id: Snowflake, password: &str) -> HttpResult<Secret> {
         let secrets = generate_user_secrets();
         sqlx::query_as!(Secret, r#"INSERT INTO secrets(id, password_hash, secret1, secret2, secret3) VALUES ($1, $2, $3, $4, $5) RETURNING *"#,
             id.0, digest(password), secrets.0, secrets.1, secrets.2
         )
             .fetch_one(&self.pool).await
-    }
-
-    /// Create a new user in the database.
-    ///
-    /// ### Errors
-    ///
-    /// * [`sqlx::Error`] - If the database query fails.
-    pub async fn create_user(&self, id: Snowflake, username: &str, display_name: &str) -> Result<User, sqlx::Error> {
-        sqlx::query_as!(User, r#"INSERT INTO users(id, username, display_name) VALUES ($1, $2, $3) RETURNING *"#,
-            id.0, username, display_name
-        )
-            .fetch_one(&self.pool).await
-    }
-
-    /// Create a new category in the database.
-    ///
-    /// ### Errors
-    ///
-    /// * [`sqlx::Error`] - If the database query fails.
-    pub async fn create_category(&self, id: Snowflake, owner_id: Snowflake, payload: &CreateCategoryPayload) -> Result<CategoryRecord, sqlx::Error> {
-        sqlx::query_as!(CategoryRecord, r#"INSERT INTO categories(id, title, description, owner_id, locked) VALUES ($1, $2, $3, $4, $5) RETURNING *"#,
-            id.0, payload.title, payload.description, owner_id.0, payload.is_locked
-        )
-            .fetch_one(&self.pool).await
-    }
-
-    /// Update the message with the given payload.
-    ///
-    /// ### Arguments
-    ///
-    /// * `message_id` - The ID of the message.
-    /// * `content` - New message content.
-    ///
-    /// ### Errors
-    ///
-    /// * [`HttpError::UnknownMessage`] - If message is not found.
-    pub async fn update_message(&self, message_id: Snowflake, content: &str) -> Result<MessageRecord, HttpError> {
-        sqlx::query_as!(MessageRecord, r#"UPDATE messages SET content = $1 WHERE id = $2 RETURNING *"#,
-            content, message_id.0
-        )
-            .fetch_one(&self.pool).await
-            .map_err(|_| HttpError::UnknownMessage)
+            .map_err(HttpError::Database)
     }
 }
