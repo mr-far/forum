@@ -6,6 +6,7 @@ use {
     actix_ws::{CloseCode, CloseReason, ProtocolError},
     crate::{
         models::{
+            _SESSION_ID_ALPHABET,
             message::Message,
             thread::Thread,
             user::User
@@ -129,7 +130,7 @@ pub struct Ready {
     /// The currently authenticated user.
     pub user: User,
     /// All online users. This does not include current user.
-    pub users: HashMap<Snowflake, User>,
+    pub users: HashMap<Snowflake, Option<User>>,
 }
 
 impl Into<GatewayEvent> for Ready {
@@ -154,7 +155,6 @@ pub enum GatewayEvent {
     ThreadCreate(Thread),
     ThreadUpdate(Thread),
     ThreadDelete {
-        category_id: Snowflake,
         thread_id: Snowflake,
     },
     MessageCreate(Message),
@@ -173,10 +173,6 @@ pub enum GatewayEvent {
     },
     UserUpdate(User),
 }
-
-const _SESSION_ID_ALPHABET: [char; 16] = [
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f',
-];
 
 pub fn new_session_id() -> String {
     nanoid!(32, &_SESSION_ID_ALPHABET)

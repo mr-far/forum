@@ -1,4 +1,5 @@
 use {
+    sha256::digest,
     bitflags::bitflags,
     serde::{Serialize, Deserialize},
     sqlx::{
@@ -11,11 +12,9 @@ use {
         routes::{HttpError, Result as HttpResult}
     }
 };
-use crate::models::message::Message;
-use crate::models::thread::{Thread, ThreadFlags};
 
 bitflags! {
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct UserFlags: i32 {
         /// User is a system
         const SYSTEM = 1 << 0;
@@ -33,7 +32,7 @@ bitflags! {
 }
 
 bitflags! {
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct Permissions: i64 {
         /// Allows for reading non-locked threads
         const READ_PUBLIC_THREADS = 1 << 0;
@@ -61,7 +60,7 @@ bitflags! {
 bitflags_convector!(UserFlags, i32);
 bitflags_convector!(Permissions, i64);
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct User {
     /// The user ID
     pub id: Snowflake,
@@ -71,6 +70,9 @@ pub struct User {
     pub display_name: Option<String>,
     /// The user's bio
     pub bio: Option<String>,
+    /// The user's password hash. This is **never** included when serializing
+    #[serde(default, skip)]
+    pub password_hash: String,
     /// The user's permissions
     pub permissions: Permissions,
     /// The user's flags
@@ -79,13 +81,14 @@ pub struct User {
 
 impl User {
     /// Creates a new [`User`] object
-    pub fn new(id: Snowflake, username: &str, display_name: &str) -> Self {
+    pub fn new(id: Snowflake, username: &str, display_name: &str, password: &str) -> Self {
         Self {
             id,
             username: username.to_string(),
             display_name: Some(display_name.to_string()),
             bio: None,
-            permissions: Permissions::empty(),
+            password_hash: digest(password),
+            permissions: Permissions::ADD_REACTIONS | Permissions::SEND_MESSAGES | Permissions::CREATE_THREADS | Permissions::READ_PUBLIC_THREADS,
             flags: UserFlags::empty()
         }
     }
@@ -110,8 +113,8 @@ impl User {
     ///
     /// * [`HttpError::Database`] - If the category the thread will be created in is not found.
     pub async fn save<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<Self> {
-        sqlx::query!(r#"INSERT INTO users(id, username, display_name) VALUES ($1, $2, $3)"#,
-            self.id.0, self.username, self.display_name
+        sqlx::query!(r#"INSERT INTO users(id, username, display_name, password_hash) VALUES ($1, $2, $3, $4)"#,
+            self.id.0, self.username, self.display_name, self.password_hash
         )
             .execute(executor).await
             .map(|_| self)

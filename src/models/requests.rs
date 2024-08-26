@@ -53,3 +53,9 @@ pub struct ModifyMessagePayload {
     #[validate(length(min = 1, max = 4096, message="Message content length must be between 1 and 4096 characters"))]
     pub content: String,
 }
+
+#[derive(Deserialize, Validate)]
+pub struct LoginPayload {
+    pub username: String,
+    pub password: String
+}
