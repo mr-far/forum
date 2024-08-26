@@ -1,8 +1,9 @@
 use {
+    std::sync::Arc,
     actix_ws::Closed,
     futures::StreamExt,
     secrecy::ExposeSecret,
-    std::sync::Arc,
+    actix_web::HttpRequest,
     tokio::{
         select, time::{sleep, Duration},
         sync::broadcast::error::RecvError
@@ -28,6 +29,8 @@ pub struct GatewayConnection {
     pub session: actix_ws::Session,
     /// The websocket stream
     pub stream: actix_ws::MessageStream,
+    /// The websocket request
+    pub request: HttpRequest,
     /// The gateway session ID.
     pub session_id: String,
     /// The currently authenticated user.
@@ -65,8 +68,8 @@ impl GatewayConnection {
                     return Err(GatewayError::AlreadyAuthenticated);
                 }
                 let online = &self.app.online;
-                let user = self.app.database.fetch_user_by_token(packet.token.expose_secret()).await
-                    .map_err(|_| GatewayError::AuthenticationFail)?;
+                let user = self.app.database.fetch_credentials_by_token(packet.token.expose_secret()).await
+                    .map_err(|_| GatewayError::AuthenticationFail)?.1;
 
                 if online.get(&user.id.clone()).is_some() {
                     return Err(GatewayError::AlreadyAuthenticated);
@@ -76,7 +79,7 @@ impl GatewayConnection {
                 //self.app.online.insert(user.id, *self);
                 self.dispatch(Ready {
                     user,
-                    users: online.iter().map(|x| (x.0.clone(), x.1.user.clone().unwrap())).collect(), // User can be added only at line 77
+                    users: online.iter().map(|x| (x.0.clone(), x.1.user.clone())).collect(),
                 })
                     .await
             }
