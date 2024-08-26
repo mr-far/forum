@@ -8,11 +8,11 @@ use {
         App,
         routes::{Result, HttpError},
         models::{
-            category::Category,
             user::Permissions,
             requests::{CreateCategoryPayload, CreateThreadPayload},
-            message::{Message, MessageFlags, MessageRecord},
-            thread::{Thread, ThreadRecord}
+            message::{Message, MessageFlags},
+            category::Category,
+            thread::Thread
         },
         utils::{
             authorization::extract_header,
@@ -32,7 +32,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     );
 }
 
-///  Returns [`Category`] by given ID - `GET /categories/{category_id}`
+///  Returns [`Category`] by given ID - `GET /categories/{category.id}`
 ///
 /// ### Errors
 ///
@@ -72,12 +72,13 @@ async fn create_category(
         .map_err(|err| HttpError::Validation(err))?;
 
     let id = app.snowflake.lock().unwrap().build();
-    app.database.create_category(id, user.id, &payload).await
-        .map(|row| HttpResponse::Ok().json(Category::from(row, user)))
-        .map_err(HttpError::Database)
+    Category::new(id, user, &payload.title, &payload.description, payload.is_locked)
+        .save(&app.pool)
+        .await
+        .map(|row| HttpResponse::Ok().json(row))
 }
 
-/// Create a new thread and return [`Thread`] - `POST /categories/threads`
+/// Create a new thread and return [`Thread`] - `POST /categories/{category.id}/threads`
 ///
 /// ### Errors
 ///
@@ -87,6 +88,7 @@ async fn create_category(
 async fn create_thread(
     request: HttpRequest,
     payload: web::Json<CreateThreadPayload>,
+    path: web::Path<i64>,
     app: web::Data<App>,
 ) -> Result<HttpResponse> {
     let token = extract_header(&request, AUTHORIZATION)?;
@@ -103,31 +105,16 @@ async fn create_thread(
     let id = app.snowflake.lock().unwrap().build();
     let mut tx = app.pool.begin().await?;
 
-    let message = MessageRecord {
-        id: id.0,
-        content: payload.content.clone(),
-        thread_id: id.0,
-        flags: MessageFlags::UNDELETEABLE.bits(),
-        author_id: user.id.0,
-        referenced_message_id: None,
-        updated_at: None
-    }.save(&mut *tx).await
-        .map(|row| Message::from(row, user.clone()))?;
+    let message = Message::new(id, user, id, &payload.content, Some(MessageFlags::UNDELETEABLE))
+        .save(&mut *tx).await?;
 
-    let thread = ThreadRecord {
-        id: id.0,
-        author_id: user.id.0,
-        title: payload.title.clone(),
-        category_id: payload.category_id.into(),
-        original_message_id: id.0,
-        flags: 0
-    }.save(&mut *tx).await
-        .map(|row| Thread::from(row, user, message))?;
+    let thread = Thread::new(id, path.to_owned().into(), message, &payload.title, None)
+        .save(&mut *tx).await?;
 
     tx.commit()
         .await
         .map(|_| HttpResponse::Ok().json(thread))
-        .map_err(|err| HttpError::Database(err))
+        .map_err(HttpError::Database)
 }
 
 /// Delete a category - `DELETE /categories/{category_id}`

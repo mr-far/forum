@@ -52,10 +52,9 @@ async fn register(
 
     let id = app.snowflake.lock().unwrap().build();
 
-    let user = app.database.create_user(id, &payload.username, &payload.display_name).await
-        .map_err(HttpError::Database)?;
-    let secret = app.database.create_secret(id, &payload.password).await
-        .map_err(HttpError::Database)?;
+    let user = User::new(id, &payload.username, &payload.display_name)
+        .save(&app.pool).await?;
+    let secret = app.database.create_secret(id, &payload.password).await?;
 
     let token = secret.token().expose_secret().to_owned();
 

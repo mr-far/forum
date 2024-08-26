@@ -12,8 +12,8 @@ use {
         models::{
             user::Permissions,
             requests::{CreateMessagePayload, ModifyMessagePayload},
-            message::{Message, MessageRecord, MessageFlags},
-            gateway::GatewayEvent::{MessageCreate, MessageDelete, MessageUpdate, ThreadDelete}
+            message::{Message, MessageFlags},
+            gateway::GatewayEvent::*
         },
         utils::{
             authorization::extract_header,
@@ -108,8 +108,7 @@ async fn get_messages(
     let token = extract_header(&request, AUTHORIZATION)?;
     app.database.fetch_user_by_token(token).await?;
 
-    let messages = app.database.fetch_messages(path.to_owned().into(), query.limit, query.before, query.after).await
-        .map_err(HttpError::Database)?;
+    let messages = app.database.fetch_messages(path.to_owned().into(), query.limit, query.before, query.after).await?;
 
     Ok(HttpResponse::Ok().json(messages))
 }
@@ -168,16 +167,8 @@ async fn create_message(
 
     let id = app.snowflake.lock().unwrap().build();
 
-    let message = MessageRecord {
-        id: id.0,
-        content: payload.content.clone(),
-        thread_id: thread_id.to_owned(),
-        flags: 0,
-        author_id: user.id.0,
-        referenced_message_id: payload.referenced_message_id.map(|x| x.into()),
-        updated_at: None
-    }.save(&app.pool).await
-        .map(|row| Message::from(row, user.clone()))?;
+    let message = Message::new(id, user, thread_id.to_owned().into(), &payload.content, None)
+        .save(&app.pool).await?;
 
     _ = app.dispatch(DispatchTarget::Global, MessageCreate(message.clone()));
 
@@ -210,12 +201,11 @@ async fn modify_message(
         return Err(HttpError::MissingAccess);
     }
 
-    let message = app.database.update_message(path.to_owned().1.into(), &payload.content).await
-        .map(|row| Message::from(row, user))?;
+    message.clone().edit(&app.pool, &payload.content).await?;
 
     _ = app.dispatch(DispatchTarget::Global, MessageUpdate(message.clone()));
 
-    Ok(HttpResponse::Ok().json(message))
+    Ok(HttpResponse::Ok().json(message.clone()))
 }
 
 /// Delete a message - `DELETE /threads/{thread_id}/messages/{message_id}`
@@ -248,7 +238,7 @@ async fn delete_message(
         return Err(HttpError::Undeletable)
     }
 
-    _ = app.dispatch(DispatchTarget::Global, MessageDelete {thread_id: message.clone().thread_id.into(), message_id: message.clone().id.into()});
+    _ = app.dispatch(DispatchTarget::Global, MessageDelete {thread_id: message.thread_id, message_id: message.id});
 
     message.delete(&app.pool).await?;
 
