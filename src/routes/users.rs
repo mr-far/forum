@@ -1,12 +1,10 @@
 use {
     actix_web::{
-        web, HttpResponse, HttpRequest,
-        http::header::AUTHORIZATION
+        web, HttpResponse
     },
     crate::{
-        App,
-        routes::{Result, HttpError},
-        utils::authorization::extract_header
+        App, routes::{Result, HttpError},
+        models::UserCredentials
     }
 };
 
@@ -20,13 +18,10 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 /// Returns current [`User`] - `GET /users/@me`
 async fn get_current_user(
-    request: HttpRequest,
-    app: web::Data<App>,
+    credentials: Option<web::ReqData<UserCredentials>>,
 ) -> Result<HttpResponse> {
-    let token = extract_header(&request, AUTHORIZATION)?;
-
-    app.database.fetch_user_by_token(token).await
-        .map(|row| HttpResponse::Ok().json(row))
+    credentials.ok_or(HttpError::Unauthorized)
+        .map(|row| HttpResponse::Ok().json(row.into_inner().1))
 }
 
 ///  Returns [`User`] by given ID - `GET /users/{user_id}`

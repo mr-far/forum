@@ -1,23 +1,20 @@
 use {
     actix_web::{
-        web, HttpResponse, HttpRequest,
-        http::header::AUTHORIZATION
+        web, HttpResponse
     },
     validator::Validate,
     crate::{
         App,
         routes::{Result, HttpError},
         models::{
+            UserCredentials,
             user::Permissions,
             requests::{CreateCategoryPayload, CreateThreadPayload},
             message::{Message, MessageFlags},
             category::Category,
             thread::Thread
         },
-        utils::{
-            authorization::extract_header,
-            snowflake::Snowflake
-        }
+        utils::snowflake::Snowflake
     }
 };
 
@@ -56,12 +53,11 @@ async fn get_category(
 /// * [`HttpError::Validation`] - If the payload is malformed or doesn't follow requirements
 /// * [`HttpError::Database`] - If the database query fails
 async fn create_category(
-    request: HttpRequest,
     payload: web::Json<CreateCategoryPayload>,
     app: web::Data<App>,
+    credentials: Option<web::ReqData<UserCredentials>>
 ) -> Result<HttpResponse> {
-    let token = extract_header(&request, AUTHORIZATION)?;
-    let user = app.database.fetch_user_by_token(token).await?;
+    let user = credentials.ok_or(HttpError::Unauthorized)?.into_inner().1;
 
     if !user.clone().has_permission(Permissions::MANAGE_CATEGORIES) {
         return Err(HttpError::MissingAccess)
@@ -86,13 +82,12 @@ async fn create_category(
 /// * [`HttpError::Validation`] - If the payload is malformed or doesn't follow requirements
 /// * [`HttpError::Database`] - If the database query fails
 async fn create_thread(
-    request: HttpRequest,
     payload: web::Json<CreateThreadPayload>,
     path: web::Path<i64>,
     app: web::Data<App>,
+    credentials: Option<web::ReqData<UserCredentials>>
 ) -> Result<HttpResponse> {
-    let token = extract_header(&request, AUTHORIZATION)?;
-    let user = app.database.fetch_user_by_token(token).await?;
+    let user = credentials.ok_or(HttpError::Unauthorized)?.into_inner().1;
 
     if !user.clone().has_permission(Permissions::CREATE_THREADS) {
         return Err(HttpError::MissingAccess)
@@ -123,12 +118,11 @@ async fn create_thread(
 ///
 /// * `category_id` - The ID of the category to delete
 async fn delete_category(
-    request: HttpRequest,
     category_id: web::Path<Snowflake>,
-    app: web::Data<App>
+    app: web::Data<App>,
+    credentials: Option<web::ReqData<UserCredentials>>
 ) -> Result<HttpResponse> {
-    let token = extract_header(&request, AUTHORIZATION)?;
-    let user = app.database.fetch_user_by_token(token).await?;
+    let user = credentials.ok_or(HttpError::Unauthorized)?.into_inner().1;
     let category = app.database.fetch_category(category_id.to_owned()).await
         .ok_or(HttpError::UnknownCategory)?;
 

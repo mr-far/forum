@@ -1,10 +1,12 @@
 use {
     actix_web::{
         http::StatusCode,
+        middleware::from_fn,
         {web, HttpResponse}
     },
     crate::{
-        models::error
+        models::error,
+        utils::middleware::authorization_middleware
     }
 };
 
@@ -15,16 +17,19 @@ mod threads;
 mod gateway;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::scope("api/v1")
-            .configure(users::config)
-            .configure(categories::config)
-            .configure(threads::config)
-            .configure(auth::config),
-    ).service(
-        web::scope("gateway")
-            .configure(gateway::config)
-    );
+    cfg
+        .service(
+            web::scope("api/v1")
+                .configure(auth::config)
+                .wrap(from_fn(authorization_middleware))
+                .configure(users::config)
+                .configure(categories::config)
+                .configure(threads::config)
+        )
+        .service(
+            web::scope("gateway")
+                .configure(gateway::config)
+        );
 }
 
 pub type Result<T> = core::result::Result<T, HttpError>;

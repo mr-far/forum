@@ -16,7 +16,7 @@ pub mod requests;
 pub mod gateway;
 pub mod session;
 
-#[derive(Serialize,Debug, Clone, PartialEq)]
+#[derive(Serialize, Debug, Clone, PartialEq)]
 pub struct UserCredentials(pub Session, pub User);
 
 const _SESSION_ID_ALPHABET: [char; 16] = [

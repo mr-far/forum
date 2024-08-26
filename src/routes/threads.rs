@@ -1,7 +1,6 @@
 use {
     actix_web::{
-        web, HttpResponse, HttpRequest,
-        http::header::AUTHORIZATION
+        web, HttpResponse
     },
     validator::Validate,
     serde::Deserialize,
@@ -10,13 +9,13 @@ use {
         DispatchTarget,
         routes::{Result, HttpError},
         models::{
+            UserCredentials,
             user::Permissions,
             requests::{CreateMessagePayload, ModifyMessagePayload},
             message::{Message, MessageFlags},
             gateway::GatewayEvent::*
         },
         utils::{
-            authorization::extract_header,
             snowflake::Snowflake
         }
     }
@@ -61,12 +60,11 @@ async fn get_thread(
 ///
 /// * `thread_id` - The ID of the thread to delete
 async fn delete_thread(
-    request: HttpRequest,
     thread_id: web::Path<i64>,
-    app: web::Data<App>
+    app: web::Data<App>,
+    credentials: Option<web::ReqData<UserCredentials>>
 ) -> Result<HttpResponse> {
-    let token = extract_header(&request, AUTHORIZATION)?;
-    let user = app.database.fetch_user_by_token(token).await?;
+    let user = credentials.ok_or(HttpError::Unauthorized)?.into_inner().1;
     let thread = app.database.fetch_thread(thread_id.to_owned().into())
         .await?;
 
@@ -74,7 +72,7 @@ async fn delete_thread(
         return Err(HttpError::MissingAccess);
     }
 
-    _ = app.dispatch(DispatchTarget::Global, ThreadDelete {category_id: thread.category_id.into(), thread_id: thread_id.to_owned().into()});
+    _ = app.dispatch(DispatchTarget::Global, ThreadDelete {thread_id: thread_id.to_owned().into()});
 
     thread.delete(&app.pool).await?;
 
@@ -100,14 +98,10 @@ pub struct SearchMessagesQuery {
 ///
 /// * [`HttpError::UnknownThread`] - If the thread is not found
 async fn get_messages(
-    request: HttpRequest,
     path: web::Path<i64>,
     query: web::Query<SearchMessagesQuery>,
     app: web::Data<App>,
 ) -> Result<HttpResponse> {
-    let token = extract_header(&request, AUTHORIZATION)?;
-    app.database.fetch_user_by_token(token).await?;
-
     let messages = app.database.fetch_messages(path.to_owned().into(), query.limit, query.before, query.after).await?;
 
     Ok(HttpResponse::Ok().json(messages))
@@ -124,13 +118,9 @@ async fn get_messages(
 ///
 /// * [`HttpError::UnknownMessage`] - If the message is not found
 async fn get_message(
-    request: HttpRequest,
     path: web::Path<(i64, i64)>,
     app: web::Data<App>
 ) -> Result<HttpResponse> {
-    let token = extract_header(&request, AUTHORIZATION)?;
-    app.database.fetch_user_by_token(token).await?;
-
     let message = app.database.fetch_message(path.to_owned().0.into(), path.to_owned().1.into())
         .await.ok_or(HttpError::UnknownMessage)?;
 
@@ -149,13 +139,12 @@ async fn get_message(
 /// * [`HttpError::Validation`] - If the payload is malformed or doesn't follow requirements
 /// * [`HttpError::UnknownMessage`] - If the reference message is not found
 async fn create_message(
-    request: HttpRequest,
     thread_id: web::Path<i64>,
     payload: web::Json<CreateMessagePayload>,
-    app: web::Data<App>
+    app: web::Data<App>,
+    credentials: Option<web::ReqData<UserCredentials>>
 ) -> Result<HttpResponse> {
-    let token = extract_header(&request, AUTHORIZATION)?;
-    let user = app.database.fetch_user_by_token(token).await?;
+    let user = credentials.ok_or(HttpError::Unauthorized)?.into_inner().1;
 
     if !user.clone().has_permission(Permissions::SEND_MESSAGES) {
         return Err(HttpError::MissingAccess)
@@ -187,13 +176,12 @@ async fn create_message(
 /// * [`HttpError::MissingAccess`] - If the user is not the message author
 /// * [`HttpError::UnknownMessage`] - If the message is not found
 async fn modify_message(
-    request: HttpRequest,
     path: web::Path<(i64, i64)>,
     payload: web::Json<ModifyMessagePayload>,
-    app: web::Data<App>
+    app: web::Data<App>,
+    credentials: Option<web::ReqData<UserCredentials>>
 ) -> Result<HttpResponse> {
-    let token = extract_header(&request, AUTHORIZATION)?;
-    let user = app.database.fetch_user_by_token(token).await?;
+    let user = credentials.ok_or(HttpError::Unauthorized)?.into_inner().1;
     let message = app.database.fetch_message(path.to_owned().0.into(), path.to_owned().1.into())
         .await.ok_or(HttpError::UnknownMessage)?;
 
@@ -221,12 +209,11 @@ async fn modify_message(
 /// * [`HttpError::UnknownMessage`] - If the message is not found
 /// * [`HttpError::Undeletable`] - If the message has [`MessageFlags::UNDELETEABLE`]
 async fn delete_message(
-    request: HttpRequest,
     path: web::Path<(i64, i64)>,
-    app: web::Data<App>
+    app: web::Data<App>,
+    credentials: Option<web::ReqData<UserCredentials>>
 ) -> Result<HttpResponse> {
-    let token = extract_header(&request, AUTHORIZATION)?;
-    let user = app.database.fetch_user_by_token(token).await?;
+    let user = credentials.ok_or(HttpError::Unauthorized)?.into_inner().1;
     let message = app.database.fetch_message(path.to_owned().0.into(), path.to_owned().1.into())
         .await.ok_or(HttpError::UnknownMessage)?;
 

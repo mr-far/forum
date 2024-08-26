@@ -29,6 +29,7 @@ async fn gateway(
             app,
             stream,
             session,
+            request,
             session_id: new_session_id(),
             user: None,
         };
