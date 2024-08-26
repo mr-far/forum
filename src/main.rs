@@ -45,7 +45,6 @@ async fn main() -> std::io::Result<()> {
             .wrap(actix_web::middleware::Compress::default())
             .wrap(actix_web::middleware::Logger::default())
             .app_data(web::Data::clone(&data))
-            .app_data(web::Data::new(pool.clone()))
             .app_data(
                 web::JsonConfig::default()
                     .error_handler(|err, _| routes::HttpError::Payload(err).into()),
