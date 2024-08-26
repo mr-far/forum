@@ -6,6 +6,7 @@ use {
     crate::routes::{HttpError, Result as HttpResult}
 };
 
+/// Returns IPv4 address from given request. Allows X-Forwarded-For for debugging
 pub fn debug_ip(request: &HttpRequest) -> HttpResult<String> {
     let socket = request
         .connection_info()
@@ -15,6 +16,7 @@ pub fn debug_ip(request: &HttpRequest) -> HttpResult<String> {
     Ok(socket)
 }
 
+/// Returns IPv4 address from given request
 pub fn extract_ip_from_request(request: &HttpRequest) -> HttpResult<String> {
     let socket = request
         .peer_addr()
@@ -25,6 +27,7 @@ pub fn extract_ip_from_request(request: &HttpRequest) -> HttpResult<String> {
     Ok(socket)
 }
 
+/// Returns data from specified header from given request
 pub fn extract_header(request: &HttpRequest, header: HeaderName) -> HttpResult<&str> {
     let headers = request.headers();
     let header_value = headers.get(header.clone());
