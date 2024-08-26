@@ -69,3 +69,7 @@ pub fn to_string_radix_unsigned(value: u64, radix: u32) -> String {
     }
     result.iter().rev().collect()
 }
+
+pub fn hex_to_int(hex: &str) -> i64 {
+    i64::from_str_radix(hex, 16).unwrap_or_else(|_| 0)
+}
