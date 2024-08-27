@@ -46,7 +46,7 @@ pub struct Thread {
 }
 
 impl Thread {
-    /// Creates a new [`Thread`] object
+    /// Create a new [`Thread`] object
     pub fn new(id: Snowflake, category_id: Snowflake, message: Message, title: &str, flags: Option<ThreadFlags>) -> Self {
         Self {
             id,
@@ -63,7 +63,7 @@ impl Thread {
         self.flags.contains(flag)
     }
 
-    /// Saves a new thread in the database.
+    /// Save a new thread in the database.
     ///
     /// ### Returns
     ///
@@ -81,7 +81,7 @@ impl Thread {
             .map_err(|_| HttpError::UnknownCategory) // category_id references category table
     }
 
-    /// Deletes the thread.
+    /// Delete the thread.
     ///
     /// ### Errors
     ///

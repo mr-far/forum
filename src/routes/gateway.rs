@@ -5,7 +5,7 @@ use {
     crate::{
         App,
         gateway::connection::GatewayConnection,
-        models::gateway::new_session_id
+        models::new_hex_id
     }
 };
 
@@ -16,6 +16,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     );
 }
 
+/// Open a new WebSocket connection `GET /gateway/ws`
 async fn gateway(
     request: HttpRequest,
     stream: web::Payload,
@@ -30,7 +31,7 @@ async fn gateway(
             stream,
             session,
             request,
-            session_id: new_session_id(),
+            session_id: new_hex_id(32),
             user: None,
         };
         connection.run().await

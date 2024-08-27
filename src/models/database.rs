@@ -61,15 +61,15 @@ impl Database {
             .await.ok()?
     }
 
-    /// Fetch a user from the database by their auth token.
+    /// Fetch a session from the database by their auth token.
     ///
     /// ### Arguments
     ///
-    /// * `token` - The user's token.
+    /// * `token` - The session's token.
     ///
     /// ### Returns
     ///
-    /// * [`Session`] if found, otherwise [`HttpError::Unauthorized`].
+    /// * [`Session`], [`User`] if found, otherwise [`HttpError::Unauthorized`].
     pub async fn fetch_credentials_by_token(&self, token: &str) -> HttpResult<(Session, User)> {
         let parts = token.splitn(2, '.').collect::<Vec<_>>();
 
@@ -127,21 +127,15 @@ impl Database {
     ///
     /// ### Returns
     ///
-    /// * [`ThreadRecord`] if found, otherwise `None`.
+    /// * [`Thread`] if found, otherwise `None`.
     pub async fn fetch_thread(&self, thread_id: Snowflake) -> HttpResult<Thread> {
-        sqlx::query_as!(Thread, r#"
-                SELECT t.id, t.category_id, t.title, t.flags, (
-                  SELECT (m.id, m.content, m.thread_id, m.flags, m.referenced_message_id, m.updated_at, ROW_TO_JSON(omu.*))
-                  FROM messages m LEFT JOIN users omu ON m.author_id = omu.id WHERE m.id = t.original_message_id AND thread_id = t.id
-                ) AS "original_message!: Message", ROW_TO_JSON(u.*) AS "author!: User"
-                FROM threads t
-                LEFT JOIN users u ON t.author_id = u.id
-                WHERE t.id = $1"#,
-            thread_id.0
-        )
+        let row = sqlx::query!(r#"SELECT * FROM threads WHERE id = $1"#,thread_id.0)
             .fetch_one(&self.pool).await
-            .map_err(HttpError::Database)
+            .map_err(HttpError::Database)?;
+        let message = self.fetch_message(row.id.into(), row.original_message_id.into())
+            .await.ok_or(HttpError::UnknownMessage)?;
 
+        Ok(Thread::new(row.id.into(), row.category_id.into(), message, &row.title, row.flags.into()))
     }
 
     /// Fetch a message from the database by ID.
@@ -153,7 +147,7 @@ impl Database {
     ///
     /// ### Returns
     ///
-    /// * [`MessageRecord`] if found, otherwise `None`.
+    /// * [`Message`] if found, otherwise `None`.
     pub async fn fetch_message(&self, thread_id: Snowflake, message_id: Snowflake) -> Option<Message> {
         sqlx::query_as!(Message, r#"
                 SELECT m.id, m.content, m.thread_id, m.flags, m.referenced_message_id, m.updated_at, ROW_TO_JSON(u.*) AS "author!: User"
@@ -175,7 +169,7 @@ impl Database {
     ///
     /// ### Returns
     ///
-    /// [`Vec<Message>`] - The messages fetched.
+    /// [`Vec<Message>`] - Fetched messages.
     ///
     /// ### Errors
     ///
@@ -205,15 +199,15 @@ impl Database {
         Ok(rows)
     }
 
-    /// Fetch a user's secret from the database by ID.
+    /// Fetch session by ID.
     ///
     /// ### Arguments
     ///
-    /// * `user_id` - The ID of the user who secret to fetch.
+    /// * `id` - The ID of the session to fetch.
     ///
     /// ### Returns
     ///
-    /// * [`Secret`] if found, otherwise `None`.
+    /// * [`Session`] if found, otherwise `None`.
     pub async fn fetch_session(&self, id: String) -> Option<Session> {
         sqlx::query_as!(Session, r#"SELECT * FROM sessions WHERE id = $1"#, id)
             .fetch_optional(&self.pool)

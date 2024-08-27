@@ -1,5 +1,4 @@
 use {
-    nanoid::nanoid,
     serde::{Serialize, Deserialize},
     sqlx::{
         Decode, Postgres, PgExecutor,
@@ -11,7 +10,7 @@ use {
     rand::{rngs::StdRng, SeedableRng, RngCore},
     crate::{
         routes::HttpError,
-        models::_SESSION_ID_ALPHABET,
+        models::new_hex_id,
         utils::{
             convectors::{to_string_radix_signed, hex_to_int},
             snowflake::Snowflake,
@@ -25,6 +24,12 @@ pub struct Session {
     pub id: String,
     /// The user's ID
     pub user_id: Snowflake,
+    /// The device user agent where session was created
+    #[serde(default, skip)]
+    pub browser_user_agent: String,
+    /// The IP where session was created
+    #[serde(default, skip)]
+    pub ip: String,
     /// The user authentication secret (part 1)
     #[serde(default, skip)]
     pub secret1: i64,
@@ -37,42 +42,44 @@ pub struct Session {
 }
 
 impl Session {
-    /// Creates a new [`Session`] object
-    pub fn new(user_id: Snowflake) -> Self {
+    /// Create a new [`Session`] object
+    pub fn new(user_id: Snowflake, ua: String, ip: String) -> Self {
         let secrets = generate_user_secrets();
         Self {
+            ip,
             user_id,
-            id: nanoid!(14, &_SESSION_ID_ALPHABET),
+            id: new_hex_id(14),
+            browser_user_agent: ua,
             secret1: secrets.0,
             secret2: secrets.1,
             secret3: secrets.2
         }
     }
 
-    /// Serializes the session secret.
+    /// Serialize the session secret.
     pub fn secret(&self) -> String {
         serialize_user_secret(self.secret1, self.secret2, hex_to_int(&self.id))
     }
 
-    /// Serializes the session secret timestamp.
+    /// Serialize the session secret timestamp.
     pub fn secret_timestamp(&self) -> String {
         serialize_secret_timestamp(hex_to_int(&self.id), self.secret3)
     }
 
-    /// Serializes the session token.
+    /// Serialize the session token.
     pub fn token(&self) -> SecretString {
         serialize_user_token(hex_to_int(&self.id), self.secret_timestamp(), self.secret()).into()
     }
 
-    /// Saves a new session in the database.
+    /// Save a new session in the database.
     ///
     /// ### Returns
     ///
-    /// * [`User`] on success, otherwise [`HttpError`].
+    /// * [`Session`] on success, otherwise [`HttpError`].
     ///
     /// ### Errors
     ///
-    /// * [`HttpError::Database`] - If the category the thread will be created in is not found.
+    /// * [`HttpError::Database`] - If the database query fails
     pub async fn save<'a, E: PgExecutor<'a>>(self, executor: E) -> crate::routes::Result<Self> {
         sqlx::query!(r#"INSERT INTO sessions(id, user_id, secret1, secret2, secret3) VALUES ($1, $2, $3, $4, $5)"#,
             self.id, self.user_id.0, self.secret1, self.secret2, self.secret3
@@ -82,7 +89,7 @@ impl Session {
             .map_err(HttpError::Database)
     }
 
-    /// Deletes the session.
+    /// Delete the session.
     ///
     /// ### Errors
     ///

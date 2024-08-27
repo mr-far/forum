@@ -80,7 +80,7 @@ pub struct User {
 }
 
 impl User {
-    /// Creates a new [`User`] object
+    /// Create a new [`User`] object
     pub fn new(id: Snowflake, username: &str, display_name: &str, password: &str) -> Self {
         Self {
             id,
@@ -103,7 +103,7 @@ impl User {
         self.permissions.contains(permission)
     }
 
-    /// Saves a new user in the database.
+    /// Save a new user in the database
     ///
     /// ### Returns
     ///
@@ -111,7 +111,7 @@ impl User {
     ///
     /// ### Errors
     ///
-    /// * [`HttpError::Database`] - If the category the thread will be created in is not found.
+    /// * [`HttpError::Database`] - If the database query fails
     pub async fn save<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<Self> {
         sqlx::query!(r#"INSERT INTO users(id, username, display_name, password_hash) VALUES ($1, $2, $3, $4)"#,
             self.id.0, self.username, self.display_name, self.password_hash
@@ -121,11 +121,11 @@ impl User {
             .map_err(HttpError::Database)
     }
 
-    /// Deletes the user.
+    /// Delete the user
     ///
     /// ### Errors
     ///
-    /// * [`HttpError::Database`] - If the database query fails.
+    /// * [`HttpError::Database`] - If the database query fails
     pub async fn delete<'a, E: PgExecutor<'a>>(self, executor: E) -> HttpResult<()> {
         sqlx::query!(r#"DELETE FROM users WHERE id = $1"#,
             self.id.0

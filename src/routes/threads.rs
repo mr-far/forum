@@ -37,7 +37,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     );
 }
 
-///  Returns [`Thread`] by given ID - `GET /threads/{thread_id}`
+///  Return [`Thread`] by given ID - `GET /threads/{thread_id}`
 ///
 /// ### Errors
 ///
@@ -86,7 +86,7 @@ pub struct SearchMessagesQuery {
     pub after: Option<Snowflake>
 }
 
-///  Returns [`Vec<Message>`] of the thread - `GET /threads/{thread_id}/messages`
+///  Return [`Vec<Message>`] of the thread - `GET /threads/{thread_id}/messages`
 ///
 /// ### Query
 ///
@@ -107,7 +107,7 @@ async fn get_messages(
     Ok(HttpResponse::Ok().json(messages))
 }
 
-///  Returns [`Message`] by given ID - `GET /threads/{thread_id}/messages/{message_id}`
+///  Return [`Message`] by given ID - `GET /threads/{thread_id}/messages/{message_id}`
 ///
 /// ### Path
 ///
@@ -164,7 +164,7 @@ async fn create_message(
     Ok(HttpResponse::Ok().json(message))
 }
 
-/// Updates a message - `PATCH /threads/{thread_id}/messages/{message_id}`
+/// Update a message - `PATCH /threads/{thread_id}/messages/{message_id}`
 ///
 /// ### Path
 ///

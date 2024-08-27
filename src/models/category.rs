@@ -45,7 +45,7 @@ impl Category {
         }
     }
 
-    /// Saves a new category in the database.
+    /// Save a new category in the database.
     ///
     /// ### Returns
     ///
@@ -63,7 +63,7 @@ impl Category {
             .map_err(HttpError::Database)
     }
 
-    /// Deletes the category.
+    /// Delete the category.
     ///
     /// ### Errors
     ///

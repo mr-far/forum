@@ -29,7 +29,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     );
 }
 
-///  Returns [`Category`] by given ID - `GET /categories/{category.id}`
+/// Return [`Category`] by given ID - `GET /categories/{category.id}`
 ///
 /// ### Errors
 ///

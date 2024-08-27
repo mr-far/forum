@@ -1,12 +1,10 @@
 use {
-    nanoid::nanoid,
     std::collections::HashMap,
     secrecy::{ExposeSecret, SecretString},
     serde::{Deserialize, Serialize, Serializer},
     actix_ws::{CloseCode, CloseReason, ProtocolError},
     crate::{
         models::{
-            _SESSION_ID_ALPHABET,
             message::Message,
             thread::Thread,
             user::User
@@ -15,6 +13,7 @@ use {
     },
 };
 
+/// Errors that can occur during WebSocket connection.
 #[derive(thiserror::Error, Debug)]
 pub enum GatewayError {
     #[error("Decode error: {0}")]
@@ -172,8 +171,4 @@ pub enum GatewayEvent {
         user_id: Snowflake,
     },
     UserUpdate(User),
-}
-
-pub fn new_session_id() -> String {
-    nanoid!(32, &_SESSION_ID_ALPHABET)
 }

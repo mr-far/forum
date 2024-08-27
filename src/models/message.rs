@@ -45,7 +45,7 @@ pub struct Message {
 }
 
 impl Message {
-    /// Creates a new [`Message`] object
+    /// Create a new [`Message`] object
     pub fn new(id: Snowflake, author: User, thread_id: Snowflake, content: &str, flags: Option<MessageFlags>) -> Self {
         Self {
             id,
@@ -63,7 +63,7 @@ impl Message {
         self.flags.contains(flag)
     }
 
-    /// Saves a new message in the database.
+    /// Save a new message in the database.
     ///
     /// ## Returns
     ///
@@ -81,7 +81,7 @@ impl Message {
             .map_err(|_| HttpError::UnknownMessage)
     }
 
-    /// Edits an old message in the database.
+    /// Edit an old message in the database.
     ///
     /// ## Returns
     ///
@@ -99,7 +99,7 @@ impl Message {
             .map_err(|_| HttpError::UnknownMessage)
     }
 
-    /// Deletes the category.
+    /// Delete the message.
     ///
     /// ## Errors
     ///
