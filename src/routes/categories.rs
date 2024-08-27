@@ -31,7 +31,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     );
 }
 
-/// Return [`Category`] by given ID - `GET /categories/{category.id}`
+/// Returns [`Category`] by given ID - `GET /categories/{category.id}`
 ///
 /// ### Errors
 ///
@@ -47,7 +47,7 @@ async fn get_category(
     Ok(HttpResponse::Ok().json(category))
 }
 
-/// Create a new category and return [`Category`] - `POST /categories`
+/// Creates a new category and return [`Category`] - `POST /categories`
 ///
 /// ### Errors
 ///
@@ -76,7 +76,7 @@ async fn create_category(
         .map(|row| HttpResponse::Ok().json(row))
 }
 
-/// Create a new thread and return [`Thread`] - `POST /categories/{category.id}/threads`
+/// Creates a new thread and return [`Thread`] - `POST /categories/{category.id}/threads`
 ///
 /// ### Errors
 ///
@@ -114,7 +114,7 @@ async fn create_thread(
         .map_err(HttpError::Database)
 }
 
-/// Delete a category - `DELETE /categories/{category_id}`
+/// Deletes a category - `DELETE /categories/{category_id}`
 ///
 /// ### Path
 ///
@@ -144,7 +144,7 @@ pub struct SearchThreadsQuery {
     pub after: Option<Snowflake>
 }
 
-///  Return [`Vec<Thread>`] of the thread - `GET /categories/{category_id}/threads`
+/// Returns [`Vec<Thread>`] of the thread - `GET /categories/{category_id}/threads`
 ///
 /// ### Query
 ///
@@ -154,7 +154,7 @@ pub struct SearchThreadsQuery {
 ///
 /// ### Errors
 ///
-/// * [`HttpError::UnknownCategory`] - If the thread is not found
+/// * [`HttpError::UnknownCategory`] - If the category is not found
 async fn get_threads(
     path: web::Path<i64>,
     query: web::Query<SearchThreadsQuery>,

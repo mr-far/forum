@@ -24,7 +24,7 @@ async fn get_current_user(
         .map(|row| HttpResponse::Ok().json(row.into_inner().1))
 }
 
-///  Returns [`User`] by given ID - `GET /users/{user_id}`
+/// Returns [`User`] by given ID - `GET /users/{user_id}`
 ///
 /// ### Errors
 ///

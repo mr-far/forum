@@ -37,7 +37,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     );
 }
 
-///  Return [`Thread`] by given ID - `GET /threads/{thread_id}`
+/// Returns [`Thread`] by given ID - `GET /threads/{thread_id}`
 ///
 /// ### Errors
 ///
@@ -54,7 +54,7 @@ async fn get_thread(
     Ok(HttpResponse::Ok().json(thread))
 }
 
-/// Delete a thread - `DELETE /threads/{thread_id}`
+/// Deletes a thread - `DELETE /threads/{thread_id}`
 ///
 /// ### Path
 ///
@@ -86,7 +86,7 @@ pub struct SearchMessagesQuery {
     pub after: Option<Snowflake>
 }
 
-///  Return [`Vec<Message>`] of the thread - `GET /threads/{thread_id}/messages`
+/// Returns [`Vec<Message>`] of the thread - `GET /threads/{thread_id}/messages`
 ///
 /// ### Query
 ///
@@ -107,7 +107,7 @@ async fn get_messages(
     Ok(HttpResponse::Ok().json(messages))
 }
 
-///  Return [`Message`] by given ID - `GET /threads/{thread_id}/messages/{message_id}`
+/// Returns [`Message`] by given ID - `GET /threads/{thread_id}/messages/{message_id}`
 ///
 /// ### Path
 ///
@@ -127,7 +127,7 @@ async fn get_message(
     Ok(HttpResponse::Ok().json(message))
 }
 
-/// Create a new message and return [`Message`] - `POST /threads/{thread_id}/messages`
+/// Creates a new message and return [`Message`] - `POST /threads/{thread_id}/messages`
 ///
 /// ### Path
 ///
@@ -164,7 +164,7 @@ async fn create_message(
     Ok(HttpResponse::Ok().json(message))
 }
 
-/// Update a message - `PATCH /threads/{thread_id}/messages/{message_id}`
+/// Updates a message - `PATCH /threads/{thread_id}/messages/{message_id}`
 ///
 /// ### Path
 ///
@@ -196,7 +196,7 @@ async fn modify_message(
     Ok(HttpResponse::Ok().json(message.clone()))
 }
 
-/// Delete a message - `DELETE /threads/{thread_id}/messages/{message_id}`
+/// Deletes a message - `DELETE /threads/{thread_id}/messages/{message_id}`
 ///
 /// ### Path
 ///
