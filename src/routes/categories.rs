@@ -3,6 +3,7 @@ use {
         web, HttpResponse
     },
     validator::Validate,
+    serde::Deserialize,
     crate::{
         App,
         routes::{Result, HttpError},
@@ -26,6 +27,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .route("", web::post().to(create_category))
             .route("{category_id}", web::delete().to(delete_category))
             .route("{category_id}/threads", web::post().to(create_thread))
+            .route("{category_id}/threads", web::get().to(get_threads))
     );
 }
 
@@ -133,4 +135,32 @@ async fn delete_category(
     category.delete(&app.pool).await?;
 
     Ok(HttpResponse::NoContent().finish())
+}
+
+#[derive(Deserialize)]
+pub struct SearchThreadsQuery {
+    pub limit: Option<u16>,
+    pub before: Option<Snowflake>,
+    pub after: Option<Snowflake>
+}
+
+///  Return [`Vec<Thread>`] of the thread - `GET /categories/{category_id}/threads`
+///
+/// ### Query
+///
+/// * `limit` - Max number of threads to return (1-100, default 50)
+/// * `after` - Get threads after this thread ID
+/// * `before` - Get threads before this thread ID
+///
+/// ### Errors
+///
+/// * [`HttpError::UnknownCategory`] - If the thread is not found
+async fn get_threads(
+    path: web::Path<i64>,
+    query: web::Query<SearchThreadsQuery>,
+    app: web::Data<App>,
+) -> Result<HttpResponse> {
+    let threads = app.database.fetch_threads(path.to_owned().into(), query.limit, query.before, query.after).await?;
+
+    Ok(HttpResponse::Ok().json(threads))
 }

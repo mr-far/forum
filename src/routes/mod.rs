@@ -64,7 +64,7 @@ pub enum HttpError {
     WeekPassword,
     #[error("Unauthorized")]
     Unauthorized,
-    #[error("Invalid credentials: {0}")]
+    #[error("{0}")]
     InvalidCredentials(String),
     #[error("Resource can't be deleted due to its policy")]
     Undeletable

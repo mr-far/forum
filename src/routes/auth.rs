@@ -1,7 +1,7 @@
 use {
     actix_web::{
         HttpResponse, HttpRequest, web,
-        http::header::AUTHORIZATION
+        http::header::USER_AGENT
     },
     validator::Validate,
     secrecy::ExposeSecret,
@@ -11,9 +11,9 @@ use {
     crate::{
         App,
         routes::{HttpError, Result},
-        utils::authorization::extract_header,
+        utils::authorization::{extract_header, extract_ip_from_request},
         models::{
-            requests::{RegisterPayload, LoginPayload},
+            requests::{RegisterPayload, LoginPayload, LogoutPayload},
             session::Session,
             user::User
         }
@@ -25,7 +25,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         web::scope("auth")
             .route("/register", web::post().to(register))
             .route("/login", web::post().to(login))
-            //.route("/logout", web::post().to(logout))
+            .route("/logout", web::post().to(logout))
     );
 }
 
@@ -35,13 +35,14 @@ pub struct RegisterResponse {
     pub token: String
 }
 
-/// Create a new user and return [`RegisterResponse`] - `POST /register`
+/// Create a new user and return [`RegisterResponse`] - `POST /auth/register`
 ///
 /// ### Errors
 ///
 /// * [`HttpError::TakenUsername`] - If the username has already been taken
 /// * [`HttpError::WeekPassword`] - If the password is too week
 async fn register(
+    request: HttpRequest,
     payload: web::Json<RegisterPayload>,
     app: web::Data<App>,
 ) -> Result<HttpResponse> {
@@ -62,7 +63,7 @@ async fn register(
 
     let user = User::new(id, &payload.username, &payload.display_name, &payload.password)
         .save(&app.pool).await?;
-    let secret = Session::new(id)
+    let secret = Session::new(id, extract_header(&request, USER_AGENT)?.to_string(), extract_ip_from_request(&request)?)
         .save(&app.pool).await?;
 
     let token = secret.token().expose_secret().to_owned();
@@ -79,6 +80,11 @@ pub struct LoginResponse {
     pub token: String
 }
 
+/// Create a new session and return [`LoginResponse`] - `POST /auth/login`
+///
+/// ### Errors
+///
+/// * [`HttpError::InvalidCredentials`] - If the username or password is invalid
 async fn login(
     request: HttpRequest,
     payload: web::Json<LoginPayload>,
@@ -88,17 +94,41 @@ async fn login(
         .validate()
         .map_err(|err| HttpError::Validation(err))?;
 
-    let token = extract_header(&request, AUTHORIZATION)?;
-    let user = app.database.fetch_credentials_by_token(token).await?.1;
+    let user = app.database.fetch_user_by_username(&payload.username)
+        .await.ok_or(HttpError::InvalidCredentials("Username or password is invalid".to_string()))?;
 
     if user.password_hash != digest(&payload.password) {
         return Err(HttpError::InvalidCredentials("Username or password is invalid".to_string()))
     }
 
-    let session = Session::new(user.id).save(&app.pool).await?;
+    let ip = extract_ip_from_request(&request)?;
+    let session = if let Some(session) = app.database.fetch_session_by_ip(ip.clone()).await {
+        session
+    } else {
+        Session::new(user.id, extract_header(&request, USER_AGENT)?.to_string(), ip).save(&app.pool).await?
+    };
 
     Ok(HttpResponse::Ok().json(LoginResponse {
         user,
         token: session.token().expose_secret().to_string()
     }))
+}
+
+/// Invalidate the given session - `POST /auth/logout`
+///
+/// ### Errors
+///
+/// * [`HttpError::Unauthorized`] - If the token is invalid
+async fn logout(
+    payload: web::Json<LogoutPayload>,
+    app: web::Data<App>,
+) -> Result<HttpResponse> {
+    payload
+        .validate()
+        .map_err(|err| HttpError::Validation(err))?;
+
+    app.database.fetch_credentials_by_token(&payload.token).await?.1
+        .delete(&app.pool).await?;
+
+    Ok(HttpResponse::Ok().finish())
 }

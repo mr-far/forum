@@ -4,7 +4,7 @@ use {
     crate::{
         models::{
             category::Category,
-            thread::Thread,
+            thread::{Thread, ThreadFlags},
             session::{
                 Session, serialize_secret_timestamp, serialize_user_secret, serialize_user_token
             },
@@ -18,6 +18,10 @@ use {
         }
     },
 };
+
+struct Id {
+    id: Snowflake
+}
 
 #[derive(Clone)]
 pub struct Database {
@@ -135,7 +139,7 @@ impl Database {
         let message = self.fetch_message(row.id.into(), row.original_message_id.into())
             .await.ok_or(HttpError::UnknownMessage)?;
 
-        Ok(Thread::new(row.id.into(), row.category_id.into(), message, &row.title, row.flags.into()))
+        Ok(Thread::new(row.id.into(), row.category_id.into(), message, &row.title, Some(ThreadFlags::from(row.flags))))
     }
 
     /// Fetch a message from the database by ID.
@@ -162,7 +166,7 @@ impl Database {
     ///
     /// ### Arguments
     ///
-    /// * `thread_id` - The ID of the channel the messages fetch from
+    /// * `thread_id` - The ID of the threads the messages fetch from
     /// * `limit` - The maximum number of messages to fetch. Defaults to 50, capped at 100.
     /// * `before` - Fetch messages before this ID.
     /// * `after` - Fetch messages after this ID.
@@ -199,6 +203,49 @@ impl Database {
         Ok(rows)
     }
 
+    /// Fetch channels from the category.
+    ///
+    /// ### Arguments
+    ///
+    /// * `category_id` - The ID of the category the threads fetch from
+    /// * `limit` - The maximum number of threads to fetch. Defaults to 50, capped at 100.
+    /// * `before` - Fetch messages before this ID.
+    /// * `after` - Fetch messages after this ID.
+    ///
+    /// ### Returns
+    ///
+    /// [`Vec<Thread>`] - Fetched messages.
+    ///
+    /// ### Errors
+    ///
+    /// * [`sqlx::Error`] - If the database query fails.
+    pub async fn fetch_threads(&self, category_id: Snowflake, limit: Option<u16>, before: Option<Snowflake>, after: Option<Snowflake>) -> HttpResult<Vec<Thread>> {
+        let limit = limit.unwrap_or(50).min(100);
+        let rows = if before.is_none() && after.is_none() {
+            sqlx::query_as!(Id, r#"
+                   SELECT id FROM threads WHERE category_id = $1 ORDER BY id DESC LIMIT $2"#,
+                category_id.0, i64::from(limit)
+            )
+                .fetch_all(&self.pool).await
+                .map_err(|_| HttpError::UnknownCategory)?
+        } else {
+            sqlx::query_as!(Id, r#"
+                   SELECT id FROM threads WHERE category_id = $1 AND id < $2 AND id > $3 ORDER BY id DESC LIMIT $4"#,
+                category_id.0, before.map_or(i64::MAX, Into::into), after.map_or(i64::MIN, Into::into), i64::from(limit)
+            )
+                .fetch_all(&self.pool).await
+                .map_err(|_| HttpError::UnknownCategory)?
+        };
+
+        let mut threads = vec![];
+        for id in rows {
+            let thread = self.fetch_thread(id.id).await?;
+            threads.push(thread);
+        }
+
+        Ok(threads)
+    }
+
     /// Fetch session by ID.
     ///
     /// ### Arguments
@@ -214,4 +261,18 @@ impl Database {
             .await.ok()?
     }
 
+    /// Fetch session by IP.
+    ///
+    /// ### Arguments
+    ///
+    /// * `iP` - The IP of the session to fetch.
+    ///
+    /// ### Returns
+    ///
+    /// * [`Session`] if found, otherwise `None`.
+    pub async fn fetch_session_by_ip(&self, ip: String) -> Option<Session> {
+        sqlx::query_as!(Session, r#"SELECT * FROM sessions WHERE ip = $1"#, ip)
+            .fetch_optional(&self.pool)
+            .await.ok()?
+    }
 }

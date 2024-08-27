@@ -81,8 +81,8 @@ impl Session {
     ///
     /// * [`HttpError::Database`] - If the database query fails
     pub async fn save<'a, E: PgExecutor<'a>>(self, executor: E) -> crate::routes::Result<Self> {
-        sqlx::query!(r#"INSERT INTO sessions(id, user_id, secret1, secret2, secret3) VALUES ($1, $2, $3, $4, $5)"#,
-            self.id, self.user_id.0, self.secret1, self.secret2, self.secret3
+        sqlx::query!(r#"INSERT INTO sessions(id, user_id, secret1, secret2, secret3, browser_user_agent, ip) VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
+            self.id, self.user_id.0, self.secret1, self.secret2, self.secret3, self.browser_user_agent, self.ip
         )
             .execute(executor).await
             .map(|_| self)

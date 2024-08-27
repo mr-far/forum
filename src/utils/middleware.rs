@@ -14,6 +14,11 @@ pub async fn authorization_middleware(
     req: ServiceRequest,
     next: Next<impl MessageBody>,
 ) -> Result<ServiceResponse<impl MessageBody>, Error> {
+    //TODO: Make this with wrap stuff in config
+    if req.path().contains("/auth") {
+        return Ok(next.call(req).await?);
+    };
+
     let token = extract_header(&req.request(), AUTHORIZATION)?;
     let credentials = req.app_data::<web::Data<App>>().unwrap().database.fetch_credentials_by_token(token).await?;
 

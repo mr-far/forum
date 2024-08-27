@@ -6,10 +6,10 @@ use {
 
 #[derive(Deserialize, Validate)]
 pub struct RegisterPayload {
-    #[validate(length(min = 12, message = "Too short password"))]
-    pub password: String,
     #[validate(length(min = 2, max = 32, message = "Username length must be between 2 and 32 characters"))]
     pub username: String,
+    #[validate(length(min = 12, message = "Too short password"))]
+    pub password: String,
     #[validate(length(min = 2, max = 32, message = "Display name length must be between 2 and 32 characters"))]
     pub display_name: String,
 }
@@ -58,4 +58,9 @@ pub struct ModifyMessagePayload {
 pub struct LoginPayload {
     pub username: String,
     pub password: String
+}
+
+#[derive(Deserialize, Validate)]
+pub struct LogoutPayload {
+    pub token: String,
 }
