@@ -15,9 +15,7 @@ use {
             message::{Message, MessageFlags},
             gateway::GatewayEvent::*
         },
-        utils::{
-            snowflake::Snowflake
-        }
+        utils::snowflake::Snowflake
     }
 };
 
