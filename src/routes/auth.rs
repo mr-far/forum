@@ -127,7 +127,7 @@ async fn logout(
         .validate()
         .map_err(|err| HttpError::Validation(err))?;
 
-    app.database.fetch_credentials_by_token(&payload.token).await?.1
+    app.database.fetch_credentials_by_token(&payload.token).await?.0
         .delete(&app.pool).await?;
 
     Ok(HttpResponse::Ok().finish())
