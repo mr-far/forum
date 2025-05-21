@@ -76,7 +76,7 @@ impl GatewayConnection {
                 }
 
                 self.user = Some(user.clone());
-                //self.app.online.insert(user.id, *self);
+                //self.app.online.insert(user.id, mut self);
                 self.dispatch(Ready {
                     user,
                     users: online.iter().map(|x| (x.0.clone(), x.1.user.clone())).collect(),
